@@ -305,19 +305,15 @@ app.get('/yt', checkAuth, async (req, res) => {
  try {
     const videos = await pool.query('SELECT * FROM youtube_videos ORDER BY created_at DESC');
     const ideas = await pool.query('SELECT * FROM youtube_ideas ORDER BY created_at DESC');
-    const collaborators = await pool.query('SELECT * FROM collaborators ORDER BY name');
+
     const analytics = await pool.query(`
       SELECT va.*, v.title 
       FROM youtube_analytics va
       JOIN youtube_videos v ON va.video_id = v.id
       ORDER BY va.recorded_at DESC
     `);
-    const tasks = await pool.query('SELECT * FROM video_tasks');
-    const videoCollaborators = await pool.query(`
-      SELECT vc.video_id, c.name 
-      FROM video_collaborators vc
-      JOIN collaborators c ON vc.collaborator_id = c.id
-    `);
+
+
 
     res.render('youtube_dashboard', {
       videos: videos.rows,
