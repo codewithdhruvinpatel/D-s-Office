@@ -318,10 +318,10 @@ app.get('/yt', checkAuth, async (req, res) => {
     res.render('youtube_dashboard', {
       videos: videos.rows,
       ideas: ideas.rows,
-      collaborators: collaborators.rows,
+      
       analytics: analytics.rows,
-      tasks: tasks.rows,
-      videoCollaborators: videoCollaborators.rows
+
+
     });
   } catch (err) {
     console.error(err);
