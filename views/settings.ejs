@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - D's Office</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <%- include('partials/navbar') %>
+
+    <div class="container mt-5">
+        <h2 class="mb-4">Advanced Settings</h2>
+
+        <div class="card shadow-sm p-4 mb-4">
+            <h5>Privacy</h5>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="privacyToggle">
+                <label class="form-check-label" for="privacyToggle">Make my account private</label>
+            </div>
+        </div>
+
+        <div class="card shadow-sm p-4 mb-4">
+            <h5>Security</h5>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="2faToggle">
+                <label class="form-check-label" for="2faToggle">Enable Two-Factor Authentication</label>
+            </div>
+            <button class="btn btn-outline-secondary">Manage Trusted Devices</button>
+        </div>
+
+        <div class="card shadow-sm p-4 mb-4">
+            <h5>Appearance</h5>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="themeToggle">
+                <label class="form-check-label" for="themeToggle">Enable Dark Theme</label>
+            </div>
+        </div>
+
+        <div class="card shadow-sm p-4 mb-4">
+            <h5>Account Activity</h5>
+            <a href="/settings/activity-log" class="btn btn-outline-primary">View Activity Log</a>
+            <a href="/settings/sessions" class="btn btn-outline-secondary ms-2">Manage Active Sessions</a>
+        </div>
+
+        <div class="card shadow-sm p-4 mb-4 border-danger">
+            <h5 class="text-danger">Danger Zone</h5>
+            <button class="btn btn-danger" onclick="confirmDelete()">Delete My Account</button>
+        </div>
+    </div>
+
+    <script>
+        function confirmDelete() {
+            if (confirm("Are you sure you want to permanently delete your account? This action cannot be undone.")) {
+                // Call delete route
+                alert("Account deletion request submitted (mock)");
+            }
+        }
+    </script>
+
+    <%- include('partials/footer') %>
+</body>
+</html>

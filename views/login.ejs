@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login</title>
+  <!-- Bootstrap CSS -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <style>
+.gradient-custom-2 {
+background: #2B6777;
+background: linear-gradient(164deg, rgba(43, 103, 119, 1) 48%, rgba(200, 216, 228, 1) 100%, rgba(82, 171, 152, 1) 100%);
+}
+
+
+
+
+    @media (min-width: 768px) {
+      .gradient-form {
+        height: 100vh !important;
+      }
+    }
+
+    @media (min-width: 769px) {
+      .gradient-custom-2 {
+        border-top-right-radius: 0.3rem;
+        border-bottom-right-radius: 0.3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="h-100 gradient-form" style="background-color: #eee;">
+    <div class="container py-5 h-100">
+      <div class="row d-flex justify-content-center align-items-center h-100">
+        <div class="col-xl-10">
+          <div class="card rounded-3 text-black">
+            <div class="row g-0">
+              <div class="col-lg-6">
+                <div class="card-body p-md-5 mx-md-4">
+                  <div class="text-center">
+                    <img
+                      src="https://res.cloudinary.com/dkxmucbuk/image/upload/v1748755582/Wild_mwavqw.png"
+                      style="width: 185px;"
+                      alt="logo"
+                    />
+                    <h4 class="mt-1 mb-5 pb-1">We are The D's Team</h4>
+                  </div>
+
+                  <form action="/login" method="POST">
+                    <p>Please login to your account</p>
+
+                    <div class="form-outline mb-4">
+                      <input
+                        type="text"
+                        name="email"
+                        id="username"
+                        class="form-control"
+                        placeholder="Phone number or email address"
+                        required
+                      />
+                      <label class="form-label" for="email">Email</label>
+                    </div>
+
+                    <div class="form-outline mb-4">
+                      <input
+                        type="password"
+                        name="password"
+                        id="password"
+                        class="form-control"
+                        required
+                      />
+                      <label class="form-label" for="password">Password</label>
+                    </div>
+
+                    <div class="text-center pt-1 mb-5 pb-1">
+                      <button
+                        class="btn btn-primary btn-block fa-lg gradient-custom-2 mb-3"
+                        type="submit"
+                      >
+                        Log in
+                      </button>
+                      <br>
+                      <a class="text-muted" href="#">Forgot password?</a>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div class="col-lg-6 d-flex align-items-center gradient-custom-2">
+                <div class="text-white px-3 py-4 p-md-5 mx-md-4">
+                  <h4 class="mb-4">We Are More Than Just an Office</h4>
+                  <p class="small mb-0">
+           D's Office is our central hub — built to empower our team with smart tools, smooth workflows, and a shared vision. From content creation to software development and daily operations, everything comes together here.
+
+It’s not just where we work — it’s how we grow, create, and move forward together.
+
+ 
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

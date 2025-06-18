@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>D's Office - Finance Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: #f8f9fa;
+    }
+    .card-summary {
+      border-radius: 20px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+
+<%- include('partials/navbar') %>
+
+<div class="container my-5" >
+ 
+
+  <div class="row mb-5 "style="margin-top: 100px;" >
+    <div class="col-md-4" >
+      <div class="card card-summary bg-success text-white p-4">
+        <h5>Total Income</h5>
+        <h3>₹<%= income %></h3>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card card-summary bg-danger text-white p-4">
+        <h5>Total Expense</h5>
+        <h3>₹<%= expense %></h3>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card card-summary bg-primary text-white p-4">
+        <h5>Balance</h5>
+        <h3>₹<%= balance %></h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Transaction -->
+  <div class="card p-4 mb-4">
+    <h4>Add New Transaction</h4>
+    <form method="POST" action="/add-transaction">
+      <div class="mb-3">
+        <label>Title</label>
+        <input type="text" name="title" class="form-control" placeholder="Salary / Grocery / Rent..." required>
+      </div>
+      <div class="mb-3">
+        <label>Amount</label>
+        <input type="number" name="amount" class="form-control" placeholder="₹" required>
+      </div>
+      <div class="mb-3">
+        <label>Type</label>
+        <select name="type" class="form-select">
+          <option value="income">Income</option>
+          <option value="expense">Expense</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Add Transaction</button>
+    </form>
+  </div>
+
+  <!-- Calculator Feature -->
+  <div class="card p-4 mb-4">
+    <h4>Quick Finance Calculator</h4>
+    <div class="input-group mb-3">
+      <input type="number" id="calcAmount" class="form-control" placeholder="Enter Amount">
+      <button class="btn btn-outline-secondary" onclick="calculate()">Calculate 10% Saving</button>
+    </div>
+    <p id="calcResult" class="fw-bold"></p>
+  </div>
+
+  <!-- Transaction Table -->
+  <div class="card p-4">
+    <h4>All Transactions</h4>
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Title</th>
+          <th>Type</th>
+          <th>Amount</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% transactions.forEach(t => { %>
+          <tr>
+            <td><%= new Date(t.date).toLocaleDateString() %></td>
+            <td><%= t.title %></td>
+            <td>
+              <% if (t.type === 'income') { %>
+                <span class="badge bg-success">Income</span>
+              <% } else { %>
+                <span class="badge bg-danger">Expense</span>
+              <% } %>
+            </td>
+            <td>₹<%= t.amount %></td>
+            <td>
+              <a href="/generate-bill/<%= t.id %>" class="btn btn-sm btn-outline-info">PDF</a>
+              <form action="/delete-transaction/<%= t.id %>" method="POST" style="display:inline-block;">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('partials/footer') %>
+
+<script>
+  function calculate() {
+    const amount = parseFloat(document.getElementById('calcAmount').value);
+    if (!isNaN(amount)) {
+      const saving = amount * 0.1;
+      document.getElementById('calcResult').innerText = `You should save ₹${saving.toFixed(2)}`;
+    } else {
+      document.getElementById('calcResult').innerText = 'Please enter a valid amount';
+    }
+  }
+</script>
+
+</body>
+</html>
