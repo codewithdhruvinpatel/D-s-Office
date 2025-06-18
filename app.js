@@ -16,11 +16,10 @@ const app = express();
 // Database Setup (PostgreSQL)
 // ======================
 const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'dsoffice',
-  password: 'Dhruvin2394@',
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 pool.connect()
