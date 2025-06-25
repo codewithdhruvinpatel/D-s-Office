@@ -7,10 +7,19 @@ const path = require('path');
 const multer = require('multer');
 const storageP = multer.memoryStorage();  // store file directly in memory
 const uploadP = multer({ storage: storageP });
+
 const fetch = require('node-fetch'); // for calling YouTube API
 const axios = require('axios');
 const PDFDocument = require('pdfkit');
 const app = express();
+const fs = require('fs');
+
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('ffmpeg-static');
+const sharp = require('sharp');
+const heicConvert = require('heic-convert');
+const crypto = require('node:crypto');
+
 
 // ======================
 // Database Setup (PostgreSQL)
