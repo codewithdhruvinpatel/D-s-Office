@@ -776,6 +776,12 @@ app.get('/session-test', (req, res) => {
 });
 
 
+
+
+
+
+
+
 const storageFile = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadPath = path.join(__dirname, 'uploads', String(req.session.user.id));
@@ -816,14 +822,14 @@ app.post('/repo/create', checkAuth, async (req, res) => {
 // Upload file into specific repository
 app.post('/upload/:repoId', checkAuth, uploadFile.single('file'), async (req, res) => {
   const repoId = req.params.repoId;
-const shareToken = crypto.randomBytes(16).toString('hex');
+
   // Calculate current user usage
   const currentUsage = await getUserStorageUsage(req.session.user.id);
   const newFileSize = req.file.size;
   const totalUsageAfterUpload = currentUsage + newFileSize;
 
   const storageLimit = 10 * 1024 * 1024 * 1024; // 10 GB in bytes
-
+  const shareToken = crypto.randomBytes(16).toString('hex'); // Generate a random share token
   if (totalUsageAfterUpload > storageLimit) {
     // Delete uploaded file from disk since we don't save it in DB
     const filePath = path.join(__dirname, 'uploads', String(req.session.user.id), req.file.filename);
@@ -935,6 +941,27 @@ app.post('/repo/rename/:repoId', checkAuth, async (req, res) => {
 });
 
 // UPLOAD FILE (already working)
+app.post('/upload/:repoId', upload.single('file'), async (req, res) => {
+  const file = req.file;
+  const repoId = req.params.repoId;
+  const userId = req.session.user.id; // adjust based on your auth system
+
+  if (!file) return res.status(400).send('No file uploaded.');
+
+  await pool.query(`
+    INSERT INTO files (filename, filetype, filesize, repository_id, uploaded_by, filedata, uploaded_at)
+    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+  `, [
+    file.originalname,
+    file.mimetype,
+    file.size,
+    repoId,
+    userId,
+    file.buffer
+  ]);
+
+  res.redirect('/repo/' + repoId);
+});
 
 // DELETE FILE (already working)
 app.post('/file/delete/:fileId', checkAuth, async (req, res) => {
@@ -1093,7 +1120,6 @@ app.get('/public/:token', async (req, res) => {
 
     res.render('public_view', { file });
 });
-
 // ======================
 // Server Start
 // ======================
