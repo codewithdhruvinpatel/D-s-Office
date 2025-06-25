@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Folder - <%= repo.name %></title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+  <style>
+    body { background-color: #f4f6f9; }
+    .file-card {
+      border: none;
+      border-radius: 20px;
+      padding: 30px 20px;
+      text-align: center;
+      background: linear-gradient(135deg, #ffffff, #f0f0f0);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+      position: relative;
+      transition: all 0.3s ease;
+      height: 250px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .file-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.15);
+    }
+    .file-icon {
+      font-size: 60px;
+      margin-bottom: 15px;
+    }
+    .file-name {
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none !important;
+      color: #333;
+      word-break: break-word;
+    }
+    .dropdown { position: absolute; top: 10px; right: 10px; }
+    .progress-container {
+      background: #fff;
+      border-radius: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      padding: 15px 20px;
+    }
+  </style>
+</head>
+
+<body>
+
+<%- include('partials/navbar') %>
+
+<div class="container my-5" >
+  <div class="d-flex justify-content-between align-items-center mb-4" style="margin-top: 100px;">
+    <h2><i class="bi bi-folder2-open"></i> Folder: <%= repo.name %></h2>
+    <a href="/drive" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+
+  <!-- Upload form -->
+  <form id="uploadForm" action="/upload/<%= repo.id %>" method="POST" enctype="multipart/form-data" class="mb-4 d-flex justify-content-center">
+    <div class="input-group w-50">
+      <input type="file" name="file" class="form-control" required>
+      <button class="btn btn-success" type="submit">Upload</button>
+    </div>
+  </form>
+
+  <div id="uploadProgress" class="progress-container mb-4 d-none w-50 mx-auto">
+    <div class="progress">
+      <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+    </div>
+  </div>
+
+  <% if (files.length === 0) { %>
+    <div class="alert alert-info text-center py-4">
+      <i class="bi bi-file-earmark-x"></i> No files in this folder yet. Upload your first file.
+    </div>
+  <% } %>
+
+  <div class="row">
+    <% files.forEach(file => { 
+      let icon = 'bi-file-earmark';
+      let color = '#007bff';
+      let badge = 'File';
+      if (file.filetype.startsWith('image/')) { icon = 'bi-file-earmark-image'; color = '#ff7f50'; badge = 'Image'; }
+      else if (file.filetype.startsWith('video/')) { icon = 'bi-file-earmark-play'; color = '#dc3545'; badge = 'Video'; }
+      else if (file.filetype.includes('pdf')) { icon = 'bi-file-earmark-pdf'; color = '#d63384'; badge = 'PDF'; }
+      else if (file.filetype.includes('zip') || file.filetype.includes('rar')) { icon = 'bi-file-earmark-zip'; color = '#fd7e14'; badge = 'Archive'; }
+    %>
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-4">
+      <div class="file-card">
+        <a href="/file/preview/<%= file.id %>" class="text-decoration-none">
+          <i class="bi <%= icon %> file-icon" style="color:<%= color %>;"></i>
+          <div class="file-name"><%= file.filename %></div>
+          <small class="text-muted"><%= (file.filesize / 1024).toFixed(2) %> KB</small><br>
+          <span class="badge bg-secondary"><%= badge %></span>
+        </a>
+
+        <div class="dropdown">
+          <button class="btn btn-sm btn-light" type="button" data-bs-toggle="dropdown">
+            <i class="bi bi-three-dots-vertical"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a href="/file/preview/<%= file.id %>" class="dropdown-item"><i class="bi bi-eye"></i> Preview</a></li>
+            <li><a href="/file/download/<%= file.id %>" class="dropdown-item"><i class="bi bi-download"></i> Download</a></li>
+            <li><button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#renameModal" onclick="setRename('<%= file.id %>', '<%= file.filename %>')"><i class="bi bi-pencil-square"></i> Rename</button></li>
+            <li><button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#moveModal" onclick="setMove('<%= file.id %>')"><i class="bi bi-arrows-move"></i> Move</button></li>
+
+            <!-- New Share -->
+            <li><a href="/file/share/<%= file.id %>" class="dropdown-item"><i class="bi bi-link-45deg"></i> Share Link</a></li>
+
+            <!-- New Info -->
+            <li><button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#infoModal<%= file.id %>"><i class="bi bi-info-circle"></i> Information</button></li>
+
+            <li>
+              <form action="/file/delete/<%= file.id %>" method="POST" onsubmit="return confirm('Delete this file?')">
+                <button type="submit" class="dropdown-item text-danger"><i class="bi bi-trash"></i> Delete</button>
+              </form>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Information Modal -->
+    <div class="modal fade" id="infoModal<%= file.id %>" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">File Information</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <p><strong>File Name:</strong> <%= file.filename %></p>
+            <p><strong>Uploaded By:</strong> <%= file.uploaded_by_name %></p>
+            <p><strong>Date & Time:</strong> <%= file.uploaded_at.toLocaleString() %></p>
+            <p><strong>Size:</strong> <%= (file.filesize/1024/1024).toFixed(2) %> MB</p>
+            <p><strong>Access:</strong> Private</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <% }) %>
+  </div>
+</div>
+
+<!-- Rename Modal -->
+<div class="modal fade" id="renameModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form id="renameForm" method="POST" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Rename File</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="text" id="renameInput" name="newname" class="form-control" required>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-success">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Move Modal -->
+<div class="modal fade" id="moveModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form id="moveForm" method="POST" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Move File</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <select name="targetRepo" class="form-select" required>
+          <% allRepos.forEach(r => { if (r.id != repo.id) { %>
+              <option value="<%= r.id %>"><%= r.name %></option>
+          <% }}); %>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary">Move</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function setRename(id, filename) {
+    document.getElementById('renameInput').value = filename;
+    document.getElementById('renameForm').action = '/file/rename/' + id;
+  }
+  function setMove(id) {
+    document.getElementById('moveForm').action = '/file/move/' + id;
+  }
+
+  const uploadForm = document.getElementById("uploadForm");
+  const progressBar = document.querySelector(".progress-bar");
+  const progressContainer = document.getElementById("uploadProgress");
+
+  uploadForm.addEventListener("submit", function(e) {
+    e.preventDefault();
+    progressContainer.classList.remove('d-none');
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", uploadForm.action);
+    xhr.upload.addEventListener("progress", function(e) {
+      if (e.lengthComputable) {
+        let percent = Math.round((e.loaded / e.total) * 100);
+        progressBar.style.width = percent + "%";
+        progressBar.innerText = percent + "%";
+      }
+    });
+    xhr.onload = () => location.reload();
+    xhr.onerror = () => alert("Upload failed.");
+    const formData = new FormData(uploadForm);
+    xhr.send(formData);
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
