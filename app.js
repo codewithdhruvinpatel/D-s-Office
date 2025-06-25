@@ -776,23 +776,6 @@ app.get('/session-test', (req, res) => {
 });
 
 
-
-
-
-
-
-
-const storageFile = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadPath = path.join(__dirname, 'uploads', String(req.session.user.id));
-    fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
-  }
-});
-const uploadFile = multer({ storage: storageFile  });
 // Show repositories
 app.get('/drive', checkAuth, async (req, res) => {
   const repos = await pool.query(
@@ -820,35 +803,55 @@ app.post('/repo/create', checkAuth, async (req, res) => {
   res.redirect('/drive');
 });
 // Upload file into specific repository
-app.post('/upload/:repoId', checkAuth, uploadFile.single('file'), async (req, res) => {
-  const repoId = req.params.repoId;
+// Multer in-memory storage (✔️ works with Render)
+const uploadD = multer({ storage: multer.memoryStorage() });
 
-  // Calculate current user usage
-  const currentUsage = await getUserStorageUsage(req.session.user.id);
-  const newFileSize = req.file.size;
-  const totalUsageAfterUpload = currentUsage + newFileSize;
+// Upload route using memory and DB storage
+app.post('/upload/:repoId', checkAuth, uploadD.single('file'), async (req, res) => {
+  try {
+    const file = req.file;
+    const repoId = req.params.repoId;
+    const userId = req.session.user.id;
+    const shareToken = crypto.randomBytes(16).toString('hex');
 
-  const storageLimit = 10 * 1024 * 1024 * 1024; // 10 GB in bytes
-  const shareToken = crypto.randomBytes(16).toString('hex'); // Generate a random share token
-  if (totalUsageAfterUpload > storageLimit) {
-    // Delete uploaded file from disk since we don't save it in DB
-    const filePath = path.join(__dirname, 'uploads', String(req.session.user.id), req.file.filename);
-    fs.unlinkSync(filePath);
-    
-    return res.send("❌ Storage limit exceeded! You have only 10 GB storage limit.");
+    if (!file) return res.status(400).send("No file uploaded");
+
+    // Storage limit check (10GB/user)
+    const usage = await getUserStorageUsage(userId);
+    if (usage + file.size > 10 * 1024 * 1024 * 1024) {
+      return res.send("❌ Storage limit exceeded! You have only 10 GB storage limit.");
+    }
+
+    // Save to DB
+    await pool.query(`
+      INSERT INTO files (repository_id, user_id, filename, filetype, filesize, filedata, uploaded_by_name, share_token)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [
+      repoId,
+      userId,
+      file.originalname,
+      file.mimetype,
+      file.size,
+      file.buffer,
+      req.session.user.email,
+      shareToken
+    ]);
+
+    res.redirect(`/repo/${repoId}`);
+  } catch (err) {
+    console.error("Upload error:", err);
+    res.status(500).send("Internal Server Error");
   }
-
-  const filePath = path.join('uploads', String(req.session.user.id), req.file.filename);
-
-  await pool.query(`
-    INSERT INTO files (repository_id, user_id, filename, filetype, filesize, storage_path, uploaded_by_name, share_token)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-  `, [
-    repoId, req.session.user.id, req.file.originalname, req.file.mimetype, req.file.size, filePath, req.session.user.email, shareToken
-  ]);
-
-  res.redirect(`/repo/${repoId}`);
 });
+
+// Helper to get user storage usage
+async function getUserStorageUsage(userId) {
+  const result = await pool.query(
+    'SELECT COALESCE(SUM(filesize), 0) AS total FROM files WHERE user_id = $1',
+    [userId]
+  );
+  return parseInt(result.rows[0].total);
+}
 
 
 
@@ -883,26 +886,30 @@ app.get('/file/download/:fileId', checkAuth, async (req, res) => {
 });
 
 
+// View file inline from DB
 app.get('/file/view/:fileId', checkAuth, async (req, res) => {
-  const fileId = req.params.fileId;
-  const fileResult = await pool.query(
-    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
-    [fileId, req.session.user.id]
-  );
+  const { fileId } = req.params;
+  const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  if (result.rowCount === 0) return res.status(404).send("File not found");
 
-  if (fileResult.rowCount === 0) return res.status(404).send("File not found");
-
-  const file = fileResult.rows[0];
-  const filePath = path.join(__dirname, file.storage_path);
-
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("File does not exist on server");
-  }
-
+  const file = result.rows[0];
   res.setHeader('Content-Type', file.filetype);
-  res.setHeader('Content-Disposition', 'inline; filename="' + file.filename + '"');
-  fs.createReadStream(filePath).pipe(res);
+  res.setHeader('Content-Disposition', `inline; filename="${file.filename}"`);
+  res.send(file.filedata);
 });
+
+// Download file from DB
+app.get('/file/download/:fileId', checkAuth, async (req, res) => {
+  const { fileId } = req.params;
+  const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  if (result.rowCount === 0) return res.status(404).send("File not found");
+
+  const file = result.rows[0];
+  res.setHeader('Content-Type', file.filetype);
+  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+  res.send(file.filedata);
+});
+
 // CREATE FOLDER
 app.post('/repo/create', checkAuth, async (req, res) => {
   const { name, parent_id } = req.body;
@@ -1120,7 +1127,17 @@ app.get('/public/:token', async (req, res) => {
 
     res.render('public_view', { file });
 });
-// ======================
+
+
+   
+
+
+
+
+
+
+
+
 // Server Start
 // ======================
 app.listen(3000, () => {
