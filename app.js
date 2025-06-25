@@ -776,6 +776,323 @@ app.get('/session-test', (req, res) => {
 });
 
 
+const storageFile = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadPath = path.join(__dirname, 'uploads', String(req.session.user.id));
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+const uploadFile = multer({ storage: storageFile  });
+// Show repositories
+app.get('/drive', checkAuth, async (req, res) => {
+  const repos = await pool.query(
+    'SELECT * FROM repositories WHERE user_id = $1 AND parent_id IS NULL',
+    [req.session.user.id]
+  );
+
+  const usage = await getUserStorageUsage(req.session.user.id);
+  const limit = 10 * 1024 * 1024 * 1024; // 10 GB
+
+  res.render('drive', { 
+    repos: repos.rows, 
+    storageUsed: usage, 
+    storageLimit: limit 
+  });
+});
+
+
+// Create new repository
+app.post('/repo/create', checkAuth, async (req, res) => {
+  const { name, parent_id } = req.body;
+  await pool.query('INSERT INTO repositories (user_id, name, parent_id) VALUES ($1, $2, $3)', [
+    req.session.user.id, name, parent_id || null
+  ]);
+  res.redirect('/drive');
+});
+// Upload file into specific repository
+app.post('/upload/:repoId', checkAuth, uploadFile.single('file'), async (req, res) => {
+  const repoId = req.params.repoId;
+const shareToken = crypto.randomBytes(16).toString('hex');
+  // Calculate current user usage
+  const currentUsage = await getUserStorageUsage(req.session.user.id);
+  const newFileSize = req.file.size;
+  const totalUsageAfterUpload = currentUsage + newFileSize;
+
+  const storageLimit = 10 * 1024 * 1024 * 1024; // 10 GB in bytes
+
+  if (totalUsageAfterUpload > storageLimit) {
+    // Delete uploaded file from disk since we don't save it in DB
+    const filePath = path.join(__dirname, 'uploads', String(req.session.user.id), req.file.filename);
+    fs.unlinkSync(filePath);
+    
+    return res.send("❌ Storage limit exceeded! You have only 10 GB storage limit.");
+  }
+
+  const filePath = path.join('uploads', String(req.session.user.id), req.file.filename);
+
+  await pool.query(`
+    INSERT INTO files (repository_id, user_id, filename, filetype, filesize, storage_path, uploaded_by_name, share_token)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+  `, [
+    repoId, req.session.user.id, req.file.originalname, req.file.mimetype, req.file.size, filePath, req.session.user.email, shareToken
+  ]);
+
+  res.redirect(`/repo/${repoId}`);
+});
+
+
+
+app.get('/repo/:repoId', checkAuth, async (req, res) => {
+  const repo = await pool.query('SELECT * FROM repositories WHERE id = $1 AND user_id = $2', [req.params.repoId, req.session.user.id]);
+  const files = await pool.query('SELECT * FROM files WHERE repository_id = $1 AND user_id = $2', [req.params.repoId, req.session.user.id]);
+  
+  // Fetch all folders for move modal
+  const allRepos = await pool.query('SELECT * FROM repositories WHERE user_id = $1', [req.session.user.id]);
+
+  res.render('repo', { repo: repo.rows[0], files: files.rows, allRepos: allRepos.rows });
+});
+
+
+app.get('/file/download/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+  const fileResult = await pool.query(
+    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+    [fileId, req.session.user.id]
+  );
+
+  if (fileResult.rowCount === 0) return res.status(404).send("File not found");
+
+  const file = fileResult.rows[0];
+  const filePath = path.join(__dirname, file.storage_path);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("File does not exist on server");
+  }
+
+  res.download(filePath, file.filename);
+});
+
+
+app.get('/file/view/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+  const fileResult = await pool.query(
+    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+    [fileId, req.session.user.id]
+  );
+
+  if (fileResult.rowCount === 0) return res.status(404).send("File not found");
+
+  const file = fileResult.rows[0];
+  const filePath = path.join(__dirname, file.storage_path);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("File does not exist on server");
+  }
+
+  res.setHeader('Content-Type', file.filetype);
+  res.setHeader('Content-Disposition', 'inline; filename="' + file.filename + '"');
+  fs.createReadStream(filePath).pipe(res);
+});
+// CREATE FOLDER
+app.post('/repo/create', checkAuth, async (req, res) => {
+  const { name, parent_id } = req.body;
+  await pool.query(
+    'INSERT INTO repositories (user_id, name, parent_id) VALUES ($1, $2, $3)',
+    [req.session.user.id, name, parent_id || null]
+  );
+  res.redirect('/drive');
+});
+
+// DELETE FOLDER (recursive)
+app.post('/repo/delete/:repoId', checkAuth, async (req, res) => {
+  const repoId = req.params.repoId;
+
+  // Delete files inside folder
+  await pool.query('DELETE FROM files WHERE repository_id = $1 AND user_id = $2', [repoId, req.session.user.id]);
+
+  // Delete subfolders recursively
+  async function deleteSubfolders(id) {
+    const subRepos = await pool.query('SELECT id FROM repositories WHERE parent_id = $1 AND user_id = $2', [id, req.session.user.id]);
+    for (const sub of subRepos.rows) {
+      await deleteSubfolders(sub.id);
+    }
+    await pool.query('DELETE FROM repositories WHERE id = $1 AND user_id = $2', [id, req.session.user.id]);
+  }
+
+  await deleteSubfolders(repoId);
+  res.redirect('/drive');
+});
+
+// RENAME FOLDER
+app.post('/repo/rename/:repoId', checkAuth, async (req, res) => {
+  const { name } = req.body;
+  await pool.query('UPDATE repositories SET name = $1 WHERE id = $2 AND user_id = $3', [name, req.params.repoId, req.session.user.id]);
+  res.redirect('/drive');
+});
+
+// UPLOAD FILE (already working)
+
+// DELETE FILE (already working)
+app.post('/file/delete/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+  const file = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  if (file.rowCount === 0) return res.send("File not found");
+
+  // Delete from disk
+  const fullPath = path.join(__dirname, file.rows[0].storage_path);
+  if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+
+  await pool.query('DELETE FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  res.redirect(`/repo/${file.rows[0].repository_id}`);
+});
+
+// RENAME FILE
+app.post('/file/rename/:fileId', checkAuth, async (req, res) => {
+  const { newname } = req.body;
+  const fileId = req.params.fileId;
+  const file = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  if (file.rowCount === 0) return res.send("File not found");
+
+  await pool.query('UPDATE files SET filename = $1 WHERE id = $2 AND user_id = $3', [newname, fileId, req.session.user.id]);
+  res.redirect(`/repo/${file.rows[0].repository_id}`);
+});
+
+// MOVE FILE TO ANOTHER FOLDER
+app.post('/file/move/:fileId', checkAuth, async (req, res) => {
+  const { targetRepo } = req.body;
+  const fileId = req.params.fileId;
+  await pool.query('UPDATE files SET repository_id = $1 WHERE id = $2 AND user_id = $3', [targetRepo, fileId, req.session.user.id]);
+  res.redirect(`/drive`);
+});
+
+// DOWNLOAD FILE (already working)
+app.get('/file/download/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+  
+  const file = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  if (file.rowCount === 0) return res.status(404).send("File not found");
+
+  const fullPath = path.join(__dirname, file.rows[0].storage_path);
+  if (!fs.existsSync(fullPath)) return res.status(404).send("File not found on disk");
+
+  res.download(fullPath, file.rows[0].filename);
+});
+
+// VIEW FILE INLINE (already working)
+app.get('/file/view/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+  const file = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  if (file.rowCount === 0) return res.status(404).send("File not found");
+
+  const fullPath = path.join(__dirname, file.rows[0].storage_path);
+  if (!fs.existsSync(fullPath)) return res.status(404).send("File not found on disk");
+
+  res.setHeader('Content-Type', file.rows[0].filetype);
+  res.setHeader('Content-Disposition', `inline; filename="${file.rows[0].filename}"`);
+  fs.createReadStream(fullPath).pipe(res);
+});
+
+// DOWNLOAD FILE (already working)
+app.get('/file/download/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+  const file = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  if (file.rowCount === 0) return res.status(404).send("File not found");
+
+  const fullPath = path.join(__dirname, file.rows[0].storage_path);
+  if (!fs.existsSync(fullPath)) return res.status(404).send("File not found on disk");
+
+  res.download(fullPath, file.rows[0].filename);
+});
+
+// VIEW FILE INLINE (already working)
+app.get('/file/view/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+  const file = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  if (file.rowCount === 0) return res.status(404).send("File not found");
+
+  const fullPath = path.join(__dirname, file.rows[0].storage_path);
+  if (!fs.existsSync(fullPath)) return res.status(404).send("File not found on disk");
+
+  res.setHeader('Content-Type', file.rows[0].filetype);
+  res.setHeader('Content-Disposition', `inline; filename="${file.rows[0].filename}"`);
+  fs.createReadStream(fullPath).pipe(res);
+});
+
+app.get('/file/preview/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+
+  const fileResult = await pool.query(
+    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+    [fileId, req.session.user.id]
+  );
+
+  if (fileResult.rowCount === 0) {
+    return res.status(404).send("File not found");
+  }
+
+  const file = fileResult.rows[0];
+  const filePath = path.join(__dirname, file.storage_path);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("File not found on server");
+  }
+
+  res.render('preview', { file });
+});
+app.get('/file/stream/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+  const fileResult = await pool.query(
+    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+    [fileId, req.session.user.id]
+  );
+
+  if (fileResult.rowCount === 0) return res.status(404).send("File not found");
+
+  const file = fileResult.rows[0];
+  const filePath = path.join(__dirname, file.storage_path);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("File missing");
+  }
+
+  res.setHeader('Content-Type', file.filetype); // file.filetype should be 'video/quicktime' for .mov
+
+  fs.createReadStream(filePath).pipe(res);
+});
+async function getUserStorageUsage(userId) {
+  const result = await pool.query(
+    'SELECT COALESCE(SUM(filesize), 0) AS total FROM files WHERE user_id = $1',
+    [userId]
+  );
+  return parseInt(result.rows[0].total); // in bytes
+}
+// Generate Share Link Page
+app.get('/file/share/:fileId', async (req, res) => {
+    const { fileId } = req.params;
+    const fileRes = await pool.query('SELECT * FROM files WHERE id = $1', [fileId]);
+
+    if (fileRes.rowCount === 0) return res.send('File not found');
+
+    const file = fileRes.rows[0];
+    const shareLink = `${req.protocol}://${req.get('host')}/public/${file.share_token}`;
+
+    res.render('share_page', { file, shareLink });
+});
+// Public Shared Link Access
+app.get('/public/:token', async (req, res) => {
+    const token = req.params.token;
+    const fileRes = await pool.query('SELECT * FROM files WHERE share_token = $1', [token]);
+
+    if (fileRes.rowCount === 0) return res.send('Invalid or expired link');
+
+    const file = fileRes.rows[0];
+
+    res.render('public_view', { file });
+});
 
 // ======================
 // Server Start
