@@ -26,10 +26,12 @@ const crypto = require('node:crypto');
 // ======================
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false },
+  idleTimeoutMillis: 30000,      // Close idle clients after 30 seconds
+  connectionTimeoutMillis: 2000, // Try to connect for 2 seconds
+  keepAlive: true                // Keep TCP connection alive
 });
+
 
 pool.connect()
   .then(() => console.log('✅ Connected to PostgreSQL'))
