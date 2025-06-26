@@ -25,11 +25,13 @@ const crypto = require('node:crypto');
 // Database Setup (PostgreSQL)
 // ======================
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  idleTimeoutMillis: 30000,      // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Try to connect for 2 seconds
-  keepAlive: true                // Keep TCP connection alive
+  connectionString: process.env.DATABASE_URL, // Make sure this env var is set in Render
+  ssl: {
+    rejectUnauthorized: false
+  },
+  keepAlive: true,
+  idleTimeoutMillis: 30000,           // Close idle clients after 30s
+  connectionTimeoutMillis: 5000       // Wait max 5s before failing to connect
 });
 
 
