@@ -1103,7 +1103,7 @@ app.get('/file/preview/:fileId', checkAuth, async (req, res) => {
 
 
   res.render('preview', { file });
-});
+
 app.get('/file/stream/:fileId', checkAuth, async (req, res) => {
   const fileId = req.params.fileId;
   const fileResult = await pool.query(
