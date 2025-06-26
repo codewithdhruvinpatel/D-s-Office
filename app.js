@@ -879,28 +879,39 @@ app.get('/repo/:repoId', checkAuth, async (req, res) => {
 });
 
 
-app.get('/file/download/:fileId', checkAuth, async (req, res) => {
-  const fileId = req.params.fileId;
-  const fileResult = await pool.query(
-    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
-    [fileId, req.session.user.id]
-  );
+// Download file from database (BYTEA)
+app.get('/file/download/:fileId', async (req, res) => {
+  try {
+    const { fileId } = req.params;
 
-  if (fileResult.rowCount === 0) return res.status(404).send("File not found");
+    // Ensure session and user is available
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).send("Unauthorized");
 
-  const file = fileResult.rows[0];
-  const filePath = path.join(__dirname, file.storage_path);
+    const result = await pool.query(
+      'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+      [fileId, userId]
+    );
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("File does not exist on server");
+    if (result.rowCount === 0) return res.status(404).send("File not found");
+
+    const file = result.rows[0];
+
+    res.setHeader('Content-Type', file.filetype || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+
+    // Ensure buffer is correctly passed
+    res.send(file.filedata);
+  } catch (err) {
+    console.error("Download error:", err);
+    res.status(500).send("Internal Server Error");
   }
-
-  res.download(filePath, file.filename);
 });
 
 
+
 // View file inline from DB
-app.get('/file/view/:fileId', checkAuth, async (req, res) => {
+app.get('/file/view/:fileId', async (req, res) => {
   const { fileId } = req.params;
   const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
   if (result.rowCount === 0) return res.status(404).send("File not found");
@@ -912,7 +923,7 @@ app.get('/file/view/:fileId', checkAuth, async (req, res) => {
 });
 
 // Download file from DB
-app.get('/file/download/:fileId', checkAuth, async (req, res) => {
+app.get('/file/download/:fileId', async (req, res) => {
   const { fileId } = req.params;
   const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
   if (result.rowCount === 0) return res.status(404).send("File not found");
