@@ -1043,116 +1043,118 @@ app.get('/file/view/:fileId', checkAuth, async (req, res) => {
   fs.createReadStream(fullPath).pipe(res);
 });
 
+// DOWNLOAD FILE from DB
 app.get('/file/download/:fileId', checkAuth, async (req, res) => {
   const { fileId } = req.params;
 
-  const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [
-    fileId,
-    req.session.user.id
-  ]);
+  try {
+    const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [
+      fileId,
+      req.session.user.id
+    ]);
 
-  if (result.rowCount === 0) {
-    return res.status(404).send("File not found");
+    if (result.rowCount === 0) return res.status(404).send("File not found");
+
+    const file = result.rows[0];
+    res.setHeader('Content-Type', file.filetype);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.send(file.filedata);
+  } catch (err) {
+    console.error("Download error:", err);
+    res.status(500).send("Internal server error");
   }
-
-  const file = result.rows[0];
-
-  // Set download headers
-  res.setHeader('Content-Type', file.filetype);
-  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-
-  // Send buffer (filedata) from DB
-  res.send(file.filedata);
 });
-
-
-// VIEW FILE INLINE (already working)
+// VIEW FILE INLINE (e.g., PDF, image)
 app.get('/file/view/:fileId', checkAuth, async (req, res) => {
-  const fileId = req.params.fileId;
-  const file = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
-  if (file.rowCount === 0) return res.status(404).send("File not found");
+  const { fileId } = req.params;
 
-  const fullPath = path.join(__dirname, file.rows[0].storage_path);
-  if (!fs.existsSync(fullPath)) return res.status(404).send("File not found on disk");
+  try {
+    const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [
+      fileId,
+      req.session.user.id
+    ]);
 
-  res.setHeader('Content-Type', file.rows[0].filetype);
-  res.setHeader('Content-Disposition', `inline; filename="${file.rows[0].filename}"`);
-  fs.createReadStream(fullPath).pipe(res);
-});
+    if (result.rowCount === 0) return res.status(404).send("File not found");
 
-app.get('/file/preview/:fileId', checkAuth, async (req, res) => {
-  const fileId = req.params.fileId;
-
-  const fileResult = await pool.query(
-    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
-    [fileId, req.session.user.id]
-  );
-
-  if (fileResult.rowCount === 0) {
-    return res.status(404).send("File not found");
+    const file = result.rows[0];
+    res.setHeader('Content-Type', file.filetype);
+    res.setHeader('Content-Disposition', `inline; filename="${file.filename}"`);
+    res.send(file.filedata);
+  } catch (err) {
+    console.error("View error:", err);
+    res.status(500).send("Internal server error");
   }
-
-  const file = fileResult.rows[0];
-
-  // Send file buffer inline
-  res.setHeader('Content-Type', file.filetype);
-  res.setHeader('Content-Disposition', `inline; filename="${file.filename}"`);
-  res.send(file.filedata);
 });
-
-
-
-  res.render('preview', { file });
-
+// STREAM FILE (e.g., for video/audio from DB)
 app.get('/file/stream/:fileId', checkAuth, async (req, res) => {
-  const fileId = req.params.fileId;
-  const fileResult = await pool.query(
-    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
-    [fileId, req.session.user.id]
-  );
+  const { fileId } = req.params;
 
-  if (fileResult.rowCount === 0) return res.status(404).send("File not found");
+  try {
+    const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [
+      fileId,
+      req.session.user.id
+    ]);
 
-  const file = fileResult.rows[0];
-  const filePath = path.join(__dirname, file.storage_path);
+    if (result.rowCount === 0) return res.status(404).send("File not found");
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("File missing");
+    const file = result.rows[0];
+    res.setHeader('Content-Type', file.filetype);
+    res.setHeader('Content-Disposition', `inline; filename="${file.filename}"`);
+    res.send(file.filedata); // Not chunked streaming, but works for most cases
+  } catch (err) {
+    console.error("Stream error:", err);
+    res.status(500).send("Internal server error");
   }
-
-  res.setHeader('Content-Type', file.filetype); // file.filetype should be 'video/quicktime' for .mov
-
-  fs.createReadStream(filePath).pipe(res);
 });
-async function getUserStorageUsage(userId) {
-  const result = await pool.query(
-    'SELECT COALESCE(SUM(filesize), 0) AS total FROM files WHERE user_id = $1',
-    [userId]
-  );
-  return parseInt(result.rows[0].total); // in bytes
-}
-// Generate Share Link Page
+// PREVIEW PAGE (e.g., render file info in EJS preview page)
+app.get('/file/preview/:fileId', checkAuth, async (req, res) => {
+  const { fileId } = req.params;
+
+  try {
+    const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [
+      fileId,
+      req.session.user.id
+    ]);
+
+    if (result.rowCount === 0) return res.status(404).send("File not found");
+
+    const file = result.rows[0];
+    res.render('preview', { file });
+  } catch (err) {
+    console.error("Preview error:", err);
+    res.status(500).send("Internal server error");
+  }
+});
+// GENERATE PUBLIC SHARE LINK
 app.get('/file/share/:fileId', async (req, res) => {
-    const { fileId } = req.params;
-    const fileRes = await pool.query('SELECT * FROM files WHERE id = $1', [fileId]);
+  const { fileId } = req.params;
 
-    if (fileRes.rowCount === 0) return res.send('File not found');
+  try {
+    const result = await pool.query('SELECT * FROM files WHERE id = $1', [fileId]);
+    if (result.rowCount === 0) return res.send("File not found");
 
-    const file = fileRes.rows[0];
+    const file = result.rows[0];
     const shareLink = `${req.protocol}://${req.get('host')}/public/${file.share_token}`;
-
     res.render('share_page', { file, shareLink });
+  } catch (err) {
+    console.error("Share error:", err);
+    res.status(500).send("Internal server error");
+  }
 });
-// Public Shared Link Access
+// PUBLIC ACCESS TO SHARED FILE
 app.get('/public/:token', async (req, res) => {
-    const token = req.params.token;
-    const fileRes = await pool.query('SELECT * FROM files WHERE share_token = $1', [token]);
+  const token = req.params.token;
 
-    if (fileRes.rowCount === 0) return res.send('Invalid or expired link');
+  try {
+    const result = await pool.query('SELECT * FROM files WHERE share_token = $1', [token]);
+    if (result.rowCount === 0) return res.send("Invalid or expired link");
 
-    const file = fileRes.rows[0];
-
+    const file = result.rows[0];
     res.render('public_view', { file });
+  } catch (err) {
+    console.error("Public view error:", err);
+    res.status(500).send("Internal server error");
+  }
 });
 
 
