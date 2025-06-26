@@ -1180,6 +1180,9 @@ app.get('/public/:token', async (req, res) => {
 
 // Server Start
 // ======================
+app.get('/version', (req, res) => {
+  res.render('version');
+});
 app.listen(3000, () => {
   console.log('🚀 D\'s Office is running at http://localhost:3000');
 });
