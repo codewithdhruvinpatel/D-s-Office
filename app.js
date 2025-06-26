@@ -1043,17 +1043,28 @@ app.get('/file/view/:fileId', checkAuth, async (req, res) => {
   fs.createReadStream(fullPath).pipe(res);
 });
 
-// DOWNLOAD FILE (already working)
 app.get('/file/download/:fileId', checkAuth, async (req, res) => {
-  const fileId = req.params.fileId;
-  const file = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
-  if (file.rowCount === 0) return res.status(404).send("File not found");
+  const { fileId } = req.params;
 
-  const fullPath = path.join(__dirname, file.rows[0].storage_path);
-  if (!fs.existsSync(fullPath)) return res.status(404).send("File not found on disk");
+  const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [
+    fileId,
+    req.session.user.id
+  ]);
 
-  res.download(fullPath, file.rows[0].filename);
+  if (result.rowCount === 0) {
+    return res.status(404).send("File not found");
+  }
+
+  const file = result.rows[0];
+
+  // Set download headers
+  res.setHeader('Content-Type', file.filetype);
+  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+
+  // Send buffer (filedata) from DB
+  res.send(file.filedata);
 });
+
 
 // VIEW FILE INLINE (already working)
 app.get('/file/view/:fileId', checkAuth, async (req, res) => {
@@ -1082,11 +1093,14 @@ app.get('/file/preview/:fileId', checkAuth, async (req, res) => {
   }
 
   const file = fileResult.rows[0];
-  const filePath = path.join(__dirname, file.storage_path);
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("File not found on server");
-  }
+  // Send file buffer inline
+  res.setHeader('Content-Type', file.filetype);
+  res.setHeader('Content-Disposition', `inline; filename="${file.filename}"`);
+  res.send(file.filedata);
+});
+
+
 
   res.render('preview', { file });
 });
