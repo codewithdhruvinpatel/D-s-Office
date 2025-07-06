@@ -1,0 +1,21 @@
+<%- include('partials/navbar') %>
+<div class="container" style="margin-top: 100px;">
+  <h3>Welcome, <%= user %></h3>
+ <a href="/docs/create-new" class="btn btn-primary">+ New</a>
+  <a href="/logout" class="btn btn-danger float-right">Logout</a>
+  <ul class="list-group">
+    <% documents.forEach(doc => { %>
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <strong><%= doc.title %></strong>
+        <div>
+            <a href="/docs/download/<%= doc.id %>" class="btn btn-sm btn-secondary ml-2">Download PDF</a>
+          <a href="/docs/edit/<%= doc.id %>" class="btn btn-sm btn-info">Edit</a>
+          <form method="POST" action="/docs/delete/<%= doc.id %>" style="display:inline;">
+            <button class="btn btn-sm btn-danger">Delete</button>
+          </form>
+        </div>
+      </li>
+    <% }) %>
+  </ul>
+</div>
+<%- include('partials/footer') %>
