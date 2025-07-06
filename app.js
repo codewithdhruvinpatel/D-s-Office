@@ -69,12 +69,16 @@ app.set('views', path.join(__dirname, 'views'));
 // ======================
 
 
+
 app.use(session({
-  store: new pgSession({ pool }),
+  store: new pgSession({
+    pool,
+    createTableIfMissing: true // Add this line
+  }),
   secret: process.env.SESSION_SECRET || 'super-secret-dhruvin-key',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
+  cookie: { secure: false, maxAge: 86400000 }
 }));
 
 function checkAuth(req, res, next) {
