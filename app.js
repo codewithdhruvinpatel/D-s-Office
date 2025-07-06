@@ -41,12 +41,13 @@ io.on('connection', (socket) => {
 // ======================
 // Database Setup (PostgreSQL)
 // ======================
+const { Pool } = require('pg');
+
 const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'dsoffice',
-  password: 'Dhruvin2394@',
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false, // required for Neon and other hosted providers
+  },
 });
 
 pool.connect()
