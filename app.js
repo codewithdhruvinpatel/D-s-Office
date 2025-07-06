@@ -7,33 +7,47 @@ const path = require('path');
 const multer = require('multer');
 const storageP = multer.memoryStorage();  // store file directly in memory
 const uploadP = multer({ storage: storageP });
-
+const cron = require('node-cron');
 const fetch = require('node-fetch'); // for calling YouTube API
 const axios = require('axios');
 const PDFDocument = require('pdfkit');
 const app = express();
 const fs = require('fs');
+const webPush = require('web-push');
+
 
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
 const sharp = require('sharp');
 const heicConvert = require('heic-convert');
-const crypto = require('node:crypto');
+const crypto = require('crypto');
 
+ffmpeg.setFfmpegPath(ffmpegPath);
+const puppeteer = require('puppeteer');
+const server = require('http').createServer(app);
+const { Server } = require('socket.io');
+const io = new Server(server);
+io.on('connection', (socket) => {
+  console.log('🟢 New user connected');
 
+  socket.on('edit-doc', ({ id, content }) => {
+    socket.broadcast.emit('doc-updated', { id, content });
+  });
+
+  socket.on('disconnect', () => {
+    console.log('🔴 User disconnected');
+  });
+});
 // ======================
 // Database Setup (PostgreSQL)
 // ======================
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL, // Make sure this env var is set in Render
-  ssl: {
-    rejectUnauthorized: false
-  },
-  keepAlive: true,
-  idleTimeoutMillis: 30000,           // Close idle clients after 30s
-  connectionTimeoutMillis: 5000       // Wait max 5s before failing to connect
+  user: 'postgres',
+  host: 'localhost',
+  database: 'dsoffice',
+  password: 'Dhruvin2394@',
+  port: 5432,
 });
-
 
 pool.connect()
   .then(() => console.log('✅ Connected to PostgreSQL'))
@@ -146,6 +160,16 @@ app.get('/dashboard', async (req, res) => {
 
     const youtubeIdeas = await pool.query('SELECT * FROM youtube_ideas');
     const ideaCount = youtubeIdeas.rows.length;
+    const ytubeVideos = await pool.query('SELECT * FROM youtube_videos');
+    const totalVideos = ytubeVideos.rows.length;
+ 
+    /**
+        <li class="list-group-item">Videos Idea: <strong><%= ideaCount  %></strong></li>
+              <li class="list-group-item">Total Videos: <strong>3</strong></li>
+              <li class="list-group-item">Pending Videos: <strong>2</strong></li>
+              <li class="list-group-item">Scheduled Uploads: <strong>1</strong></li>
+              <li class="list-group-item">Completed Uploads: <strong>3</strong></li>
+     */
     if (!currentEmployee) {
       return res.status(404).send('Employee not found in records.');
     }
@@ -156,7 +180,9 @@ app.get('/dashboard', async (req, res) => {
       income,
       expense,
       balance,
-      ideaCount
+      ideaCount,
+      totalVideos
+
     });
 
   } catch (error) {
@@ -319,25 +345,56 @@ app.get('/yt', checkAuth, async (req, res) => {
     const videos = await pool.query('SELECT * FROM youtube_videos ORDER BY created_at DESC');
     const ideas = await pool.query('SELECT * FROM youtube_ideas ORDER BY created_at DESC');
 
-    const analytics = await pool.query(`
-      SELECT va.*, v.title 
-      FROM youtube_analytics va
-      JOIN youtube_videos v ON va.video_id = v.id
-      ORDER BY va.recorded_at DESC
-    `);
+ const analytics = await pool.query(`
+  SELECT a.*, v.title AS video_title 
+  FROM youtube_analytics a 
+  JOIN youtube_videos v ON a.video_id = v.id
+  ORDER BY a.recorded_at DESC
+`);
 
-
+    const tasks = await pool.query('SELECT * FROM video_tasks');
+    
 
     res.render('youtube_dashboard', {
       videos: videos.rows,
       ideas: ideas.rows,
-      analytics: analytics.rows
+     
+      analytics: analytics.rows,
+      tasks: tasks.rows,
+   
     });
   } catch (err) {
     console.error(err);
     res.status(500).send('Error loading dashboard');
   }
 });
+app.post('/youtube/edit-analytics/:id', async (req, res) => {
+  const { id } = req.params;
+  const { views, likes, comments, subs } = req.body;
+
+  try {
+    await pool.query(
+      `UPDATE youtube_analytics SET views = $1, likes = $2, comments = $3, subs = $4 WHERE id = $5`,
+      [views, likes, comments, subs, id]
+    );
+    res.redirect('/yt');
+  } catch (err) {
+    console.error(err);
+    res.send('Error updating analytics.');
+  }
+});
+app.post('/youtube/delete-analytics/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await pool.query(`DELETE FROM youtube_analytics WHERE id = $1`, [id]);
+    res.redirect('/yt');
+  } catch (err) {
+    console.error(err);
+    res.send('Error deleting analytics.');
+  }
+});
+
 
 app.post('/youtube/add-video', async (req, res) => {
   const {
@@ -358,6 +415,39 @@ app.post('/youtube/add-video', async (req, res) => {
     res.send('Error adding video.');
   }
 });
+
+app.post('/youtube/edit-idea/:id', async (req, res) => {
+  const { id } = req.params;
+  const { idea_title, idea_type, priority, status, notes } = req.body;
+
+  try {
+    await pool.query(
+      `UPDATE youtube_ideas SET idea_title=$1, idea_type=$2, priority=$3, status=$4, notes=$5 WHERE id=$6`,
+      [idea_title, idea_type, priority, status, notes, id]
+    );
+    res.redirect('/yt');
+  } catch (err) {
+    console.error(err);
+    res.send('Error updating idea.');
+  }
+});
+app.post('/youtube/delete-idea/:id', async (req, res) => {
+  const { id } = req.params;
+  console.log("Delete request for Idea ID:", id); // ⬅️ THIS must show in your terminal
+
+  try {
+    const result = await pool.query(`DELETE FROM youtube_ideas WHERE id = $1`, [id]);
+    console.log("Delete Result:", result); // ⬅️ Check rows affected
+    res.redirect('/yt');
+  } catch (err) {
+    console.error(err);
+    res.send('Error deleting idea.');
+  }
+});
+
+
+
+
 app.post('/youtube/add-idea', async (req, res) => {
   const { idea_title, idea_type, priority, notes } = req.body;
 
@@ -372,6 +462,8 @@ app.post('/youtube/add-idea', async (req, res) => {
     res.send('Error adding idea.');
   }
 });
+
+
 app.post('/youtube/add-analytics', async (req, res) => {
   const { video_id, views, likes, comments, subs } = req.body;
 
@@ -450,10 +542,98 @@ app.post('/youtube/videos/delete/:id', async (req, res) => {
   }
 
 });
-
-app.get("/projects", checkAuth, (req, res) => {
-  res.render("projects");
+app.use((req, res, next) => {
+  res.locals.success = req.session.success;
+  res.locals.error = req.session.error;
+  delete req.session.success;
+  delete req.session.error;
+  next();
 });
+
+app.get('/projects', checkAuth,async (req, res) => {
+  try {
+    const requests = await pool.query(`SELECT * FROM project_requests WHERE otp IS NOT NULL AND status = 'verified'`);
+  const meetings = await pool.query(`
+  SELECT m.*, r.name AS client_name, r.project_type 
+  FROM project_meetings m
+  JOIN project_requests r ON m.project_id = r.id
+  WHERE m.status != 'completed'
+`);
+
+   
+    const services = await pool.query(`SELECT * FROM project_services`);
+    const select_project_for_meeting = await pool.query(`SELECT * FROM project_requests WHERE status = 'accepted'`);
+
+    // Get project IDs of completed meetings
+    const completedMeetingProjects = await pool.query(`SELECT project_id FROM project_meetings WHERE status = 'completed'`);
+    const projectIds = completedMeetingProjects.rows.map(r => r.project_id);
+
+    let projectsForMeeting = [];
+    if (projectIds.length > 0) {
+      const placeholders = projectIds.map((_, i) => `$${i + 1}`).join(',');
+      const result = await pool.query(`SELECT * FROM project_requests WHERE id IN (${placeholders})`, projectIds);
+      projectsForMeeting = result.rows;
+    }
+
+    // Optional: Fetch project teams
+    const updateStatusPromises = await pool.query(`
+      SELECT pt.project_id, pt.team_name, pr.name AS project_name
+      FROM project_teams pt
+      JOIN project_requests pr ON pt.project_id = pr.id
+    `);
+
+    const deployedProjects = await pool.query(`SELECT project_id FROM project_status WHERE status = 'deployed'`);
+const deployedIds = deployedProjects.rows.map(row => row.project_id);
+
+let project_services = [];
+if (deployedIds.length > 0) {
+  const placeholders = deployedIds.map((_, i) => `$${i + 1}`).join(',');
+  const query = `SELECT id, name FROM project_requests WHERE id IN (${placeholders})`;
+  const result = await pool.query(query, deployedIds);
+  project_services = result.rows;
+}
+
+const projects = await pool.query(`
+  SELECT ps.project_id, pr.name 
+  FROM project_status ps
+  JOIN project_requests pr ON ps.project_id = pr.id
+`);
+
+ const result = await pool.query('SELECT name, mobile, email FROM project_requests WHERE otp IS NULL');
+
+    res.render('projects', {
+      title: "Projects",
+      requests: requests.rows,
+      meetings: meetings.rows,
+      projects: projects.rows,
+      services: services.rows,
+      success: req.session.success,
+      error: req.session.error,
+      select_project_for_meeting: select_project_for_meeting.rows,
+      projectsForMeeting: projectsForMeeting,
+      updateStatusPromises: updateStatusPromises.rows,
+      project_services: project_services ,
+      projects: projects.rows,
+  services: services.rows,
+   selectedProject: req.session.selectedProject || null,
+  selectedServices: req.session.selectedServices || [],
+  pendingRequests: result.rows
+    });
+
+    delete req.session.success;
+    delete req.session.error;
+    // Clear after render
+delete req.session.selectedProject;
+delete req.session.selectedServices;
+  } catch (err) {
+    console.error(err);
+    req.session.error = "Failed to load projects page.";
+    res.redirect('/');
+  }
+});
+
+
+
 // ======================
 
 // ======================
@@ -714,12 +894,35 @@ app.get('/generate-bill/:id', async (req, res) => {
 
 
 
-
 app.get('/account', checkAuth, async (req, res) => {
-    const email = req.session.user.email;
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    res.render('account', { user: result.rows[0] });
+  const userEmail = req.session.user.email;
+  const userDept = req.session.user.department;
+
+  try {
+    // Fetch user info
+    const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [userEmail]);
+    const user = userResult.rows[0];
+    
+    // Fetch notifications
+    const notificationResult = await pool.query(
+      `SELECT * FROM notifications
+       WHERE (recipient_email IS NULL AND (department IS NULL OR department = $1))
+          OR recipient_email = $2
+       ORDER BY created_at DESC`,
+      [userDept, userEmail]
+    );
+
+    const notifications = notificationResult.rows;
+
+    // Render account page with both
+    res.render('account', { user, notifications });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Failed to load account page');
+  }
 });
+
 
 
 
@@ -787,6 +990,8 @@ app.get('/profile/photo', checkAuth, async (req, res) => {
 app.get('/session-test', (req, res) => {
   res.send(`Session ID: ${req.session.id} <br> User: ${JSON.stringify(req.session.user)}`);
 });
+
+
 
 
 // Show repositories
@@ -879,39 +1084,28 @@ app.get('/repo/:repoId', checkAuth, async (req, res) => {
 });
 
 
-// Download file from database (BYTEA)
-app.get('/file/download/:fileId', async (req, res) => {
-  try {
-    const { fileId } = req.params;
+app.get('/file/download/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+  const fileResult = await pool.query(
+    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+    [fileId, req.session.user.id]
+  );
 
-    // Ensure session and user is available
-    const userId = req.session?.user?.id;
-    if (!userId) return res.status(401).send("Unauthorized");
+  if (fileResult.rowCount === 0) return res.status(404).send("File not found");
 
-    const result = await pool.query(
-      'SELECT * FROM files WHERE id = $1 AND user_id = $2',
-      [fileId, userId]
-    );
+  const file = fileResult.rows[0];
+  const filePath = path.join(__dirname, file.storage_path);
 
-    if (result.rowCount === 0) return res.status(404).send("File not found");
-
-    const file = result.rows[0];
-
-    res.setHeader('Content-Type', file.filetype || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-
-    // Ensure buffer is correctly passed
-    res.send(file.filedata);
-  } catch (err) {
-    console.error("Download error:", err);
-    res.status(500).send("Internal Server Error");
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("File does not exist on server");
   }
+
+  res.download(filePath, file.filename);
 });
 
 
-
 // View file inline from DB
-app.get('/file/view/:fileId', async (req, res) => {
+app.get('/file/view/:fileId', checkAuth, async (req, res) => {
   const { fileId } = req.params;
   const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
   if (result.rowCount === 0) return res.status(404).send("File not found");
@@ -923,7 +1117,7 @@ app.get('/file/view/:fileId', async (req, res) => {
 });
 
 // Download file from DB
-app.get('/file/download/:fileId', async (req, res) => {
+app.get('/file/download/:fileId', checkAuth, async (req, res) => {
   const { fileId } = req.params;
   const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
   if (result.rowCount === 0) return res.status(404).send("File not found");
@@ -1054,135 +1248,789 @@ app.get('/file/view/:fileId', checkAuth, async (req, res) => {
   fs.createReadStream(fullPath).pipe(res);
 });
 
-// DOWNLOAD FILE from DB
+// DOWNLOAD FILE (already working)
 app.get('/file/download/:fileId', checkAuth, async (req, res) => {
-  const { fileId } = req.params;
+  const fileId = req.params.fileId;
+  const file = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  if (file.rowCount === 0) return res.status(404).send("File not found");
 
-  try {
-    const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [
-      fileId,
-      req.session.user.id
-    ]);
+  const fullPath = path.join(__dirname, file.rows[0].storage_path);
+  if (!fs.existsSync(fullPath)) return res.status(404).send("File not found on disk");
 
-    if (result.rowCount === 0) return res.status(404).send("File not found");
-
-    const file = result.rows[0];
-    res.setHeader('Content-Type', file.filetype);
-    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-    res.send(file.filedata);
-  } catch (err) {
-    console.error("Download error:", err);
-    res.status(500).send("Internal server error");
-  }
+  res.download(fullPath, file.rows[0].filename);
 });
-// VIEW FILE INLINE (e.g., PDF, image)
+
+// VIEW FILE INLINE (already working)
 app.get('/file/view/:fileId', checkAuth, async (req, res) => {
-  const { fileId } = req.params;
+  const fileId = req.params.fileId;
+  const file = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [fileId, req.session.user.id]);
+  if (file.rowCount === 0) return res.status(404).send("File not found");
 
-  try {
-    const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [
-      fileId,
-      req.session.user.id
-    ]);
+  const fullPath = path.join(__dirname, file.rows[0].storage_path);
+  if (!fs.existsSync(fullPath)) return res.status(404).send("File not found on disk");
 
-    if (result.rowCount === 0) return res.status(404).send("File not found");
-
-    const file = result.rows[0];
-    res.setHeader('Content-Type', file.filetype);
-    res.setHeader('Content-Disposition', `inline; filename="${file.filename}"`);
-    res.send(file.filedata);
-  } catch (err) {
-    console.error("View error:", err);
-    res.status(500).send("Internal server error");
-  }
+  res.setHeader('Content-Type', file.rows[0].filetype);
+  res.setHeader('Content-Disposition', `inline; filename="${file.rows[0].filename}"`);
+  fs.createReadStream(fullPath).pipe(res);
 });
-// STREAM FILE (e.g., for video/audio from DB)
-app.get('/file/stream/:fileId', checkAuth, async (req, res) => {
-  const { fileId } = req.params;
 
-  try {
-    const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [
-      fileId,
-      req.session.user.id
-    ]);
-
-    if (result.rowCount === 0) return res.status(404).send("File not found");
-
-    const file = result.rows[0];
-    res.setHeader('Content-Type', file.filetype);
-    res.setHeader('Content-Disposition', `inline; filename="${file.filename}"`);
-    res.send(file.filedata); // Not chunked streaming, but works for most cases
-  } catch (err) {
-    console.error("Stream error:", err);
-    res.status(500).send("Internal server error");
-  }
-});
-// PREVIEW PAGE (e.g., render file info in EJS preview page)
 app.get('/file/preview/:fileId', checkAuth, async (req, res) => {
-  const { fileId } = req.params;
+  const fileId = req.params.fileId;
+
+  const fileResult = await pool.query(
+    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+    [fileId, req.session.user.id]
+  );
+
+  if (fileResult.rowCount === 0) {
+    return res.status(404).send("File not found");
+  }
+
+  const file = fileResult.rows[0];
+  const filePath = path.join(__dirname, file.storage_path);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("File not found on server");
+  }
+
+  res.render('preview', { file });
+});
+app.get('/file/stream/:fileId', checkAuth, async (req, res) => {
+  const fileId = req.params.fileId;
+  const fileResult = await pool.query(
+    'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+    [fileId, req.session.user.id]
+  );
+
+  if (fileResult.rowCount === 0) return res.status(404).send("File not found");
+
+  const file = fileResult.rows[0];
+  const filePath = path.join(__dirname, file.storage_path);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("File missing");
+  }
+
+  res.setHeader('Content-Type', file.filetype); // file.filetype should be 'video/quicktime' for .mov
+
+  fs.createReadStream(filePath).pipe(res);
+});
+async function getUserStorageUsage(userId) {
+  const result = await pool.query(
+    'SELECT COALESCE(SUM(filesize), 0) AS total FROM files WHERE user_id = $1',
+    [userId]
+  );
+  return parseInt(result.rows[0].total); // in bytes
+}
+// Generate Share Link Page
+app.get('/file/share/:fileId', async (req, res) => {
+    const { fileId } = req.params;
+    const fileRes = await pool.query('SELECT * FROM files WHERE id = $1', [fileId]);
+
+    if (fileRes.rowCount === 0) return res.send('File not found');
+
+    const file = fileRes.rows[0];
+    const shareLink = `${req.protocol}://${req.get('host')}/public/${file.share_token}`;
+
+    res.render('share_page', { file, shareLink });
+});
+// Public Shared Link Access
+app.get('/public/:token', async (req, res) => {
+    const token = req.params.token;
+    const fileRes = await pool.query('SELECT * FROM files WHERE share_token = $1', [token]);
+
+    if (fileRes.rowCount === 0) return res.send('Invalid or expired link');
+
+    const file = fileRes.rows[0];
+
+    res.render('public_view', { file });
+});
+// =========================
+// 📌 Unique Routes for CRUD
+// =========================
+
+// 🟢 CREATE - New Document Page
+
+// 🟢 CREATE New Document
+//// ==============================
+// 🟢 LOGIN ROUTE (DEMO)
+// ==============================
+
+// ✅ Rename to match frontend
+// app.get('/docs/create-new', checkAuth, (req, res) => {
+//   res.render('editor', {
+//     doc: { id: '', title: '', content: '' },
+//     user: req.session.user.name || req.session.user.email
+//   });
+// });
+
+// // ==============================
+// // 📄 CREATE NEW DOC
+// // ==============================
+// app.post('/docs/save', checkAuth, async (req, res) => {
+//   try {
+ 
+
+//     const { id, title, content } = req.body;
+//     const { email } = req.session.user;
+
+//     if (!title || !content || !email) {
+//       console.log("⚠️ Missing title/content/email");
+//       return res.status(400).send('Missing data');
+//     }
+
+//     if (id && id.trim()) {
+//       await pool.query(
+//         'UPDATE documents SET title = $1, content = $2, updated_at = NOW() WHERE id = $3 AND email = $4',
+//         [title, content, id, email]
+//       );
+//     } else {
+//       await pool.query(
+//         'INSERT INTO documents (id, title, content, email) VALUES ($1, $2, $3, $4)',
+//         [uuidv4(), title, content, email]
+//       );
+//     }
+
+//     res.sendStatus(200);
+//   } catch (err) {
+//     console.error("❌ Error saving document:", err);
+//     res.status(500).send('❌ Internal Server Error');
+//   }
+// });
+
+// // ==============================
+// // 📋 LIST DOCUMENTS
+// // ==============================
+// app.get('/docs/list-all', checkAuth, async (req, res) => {
+//   const email = req.session.user.email;
+//   const result = await pool.query('SELECT * FROM documents WHERE email = $1 ORDER BY updated_at DESC', [email]);
+
+//   res.render('list', {
+//     documents: result.rows,
+//     user: req.session.user.name || req.session.user.email
+//   });
+// });
+
+// // ==============================
+// // ❌ DELETE DOCUMENT
+// // ==============================
+// app.post('/docs/delete/:docId', checkAuth, async (req, res) => {
+//   const { docId } = req.params;
+//   const email = req.session.user.email;
+//   await pool.query('DELETE FROM documents WHERE id = $1 AND email = $2', [docId, email]);
+//   res.redirect('/docs/list-all');
+// });
+
+// // ==============================
+// // 📥 DOWNLOAD DOCUMENT AS PDF
+// // ==============================
+// app.get('/docs/download/:id', checkAuth, async (req, res) => {
+//   const { id } = req.params;
+//   const email = req.session.user.email;
+//   const { rows } = await pool.query('SELECT * FROM documents WHERE id = $1 AND email = $2', [id, email]);
+
+//   if (!rows.length) return res.status(404).send('Document not found');
+//   const doc = rows[0];
+
+//   const browser = await puppeteer.launch();
+//   const page = await browser.newPage();
+//   const html = `<html><head><title>${doc.title}</title></head><body>${doc.content}</body></html>`;
+//   await page.setContent(html, { waitUntil: 'domcontentloaded' });
+//   const pdf = await page.pdf({ format: 'A4' });
+//   await browser.close();
+
+//   res.set({
+//     'Content-Type': 'application/pdf',
+//     'Content-Disposition': `attachment; filename="${doc.title}.pdf"`
+//   });
+
+//   res.send(pdf);
+// });
+
+// ==============================
+// create new document
+
+
+
+// --- FULL FINAL CODE ---
+
+// File: app.js
+
+
+const nodemailer = require('nodemailer');
+const { title } = require('process');
+
+
+
+
+// Email transporter
+let transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'codewithdhruvinpatel@gmail.com',
+    pass: 'jpsk vsfn qrvb yvpd'
+  }
+});
+
+
+
+// STEP 1: Project Request (GET)
+app.get('/project/request', (req, res) => {
+  res.render('/projects', { title: "New Project Request", requests: [], meetings: [], projects: [], services: [] });
+});
+
+// STEP 1: Project Request (POST)
+app.post('/project/request', async (req, res) => {
+  let { name, email, mobile, address, state, country, pincode, project_type } = req.body;
+  let otp = Math.floor(100000 + Math.random() * 900000);
 
   try {
-    const result = await pool.query('SELECT * FROM files WHERE id = $1 AND user_id = $2', [
-      fileId,
-      req.session.user.id
+    await pool.query(
+      `INSERT INTO project_requests 
+       (name, email, mobile, address, state, country, pincode, project_type, otp, status) 
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')`,
+      [name, email, mobile, address, state, country, pincode, project_type, otp]
+    );
+
+    await transporter.sendMail({
+      from: `"D's Office" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'OTP for Project Verification',
+      html: `<h2>Your OTP is: <strong>${otp}</strong></h2>`
+    });
+
+    req.session.success = "Project request submitted! OTP sent to your email.";
+  res.redirect('/projects#verify');
+
+  } catch (err) {
+    console.error(err);
+    req.session.error = "Failed to submit project request.";
+res.redirect('/projects#request');
+
+  }
+});
+
+// OTP Verification
+app.post('/project/verify', async (req, res) => {
+  let { email, otp } = req.body;
+  try {
+    let result = await pool.query(
+      `UPDATE project_requests SET status = 'verified', verified_at = NOW() 
+       WHERE email = $1 AND otp = $2 AND status = 'pending' RETURNING *`,
+      [email, otp]
+    );
+    req.session[result.rowCount === 0 ? 'error' : 'success'] = result.rowCount === 0
+      ? "Invalid or expired OTP."
+      : "Project verified successfully.";
+    res.redirect('/projects#manage');
+  } catch (err) {
+    console.error(err);
+    req.session.error = "Something went wrong during verification.";
+    res.redirect('/projects#verify');
+  }
+});
+// Route to render the verify page and fetch pending verifications
+// STEP 2: Send OTP to Email (for verification only)
+app.post('/project/send-otp', async (req, res) => {
+  const { email } = req.body;
+  const otp = Math.floor(100000 + Math.random() * 900000); // Generate new OTP
+
+  try {
+    // Update the OTP for the given email in DB
+    const result = await pool.query(
+      `UPDATE project_requests SET otp = $1, status = 'pending' WHERE email = $2 RETURNING *`,
+      [otp, email]
+    );
+
+    if (result.rowCount === 0) {
+      req.session.error = "Email not found for project request.";
+      return res.redirect('/projects#verify');
+    }
+
+    // Send the OTP via email
+    await transporter.sendMail({
+      from: `"D's Office" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Your OTP for Project Verification',
+      html: `<h2>Your OTP is: <strong>${otp}</strong></h2>`
+    });
+
+    req.session.success = "OTP sent successfully to your email.";
+    res.redirect('/projects#verify');
+
+  } catch (err) {
+    console.error(err);
+    req.session.error = "Failed to send OTP.";
+    res.redirect('/projects#verify');
+  }
+});
+
+
+// Manage Verified Requests
+app.post('/project/manage', async (req, res) => {
+  let { request_id, action, reason } = req.body;
+  try {
+    if (action === 'accept') {
+      await pool.query(`UPDATE project_requests SET status = 'accepted' WHERE id = $1`, [request_id]);
+    } else {
+      await pool.query(`UPDATE project_requests SET status = 'rejected', rejection_reason = $2 WHERE id = $1`, [request_id, reason]);
+    }
+    req.session.success = `Request ${action}ed successfully.`;
+   res.redirect('/projects#schedule');
+
+  } catch (err) {
+    console.error(err);
+    req.session.error = "Action failed.";
+    res.redirect('/projects#manage');
+  }
+});
+
+// Meeting Schedule
+// Meeting Schedule
+app.post('/project/meeting/schedule', async (req, res) => {
+  let { project_id, meeting_date, meeting_time, meeting_mode } = req.body;
+  try {
+    await pool.query(`INSERT INTO project_meetings (project_id, meeting_date, meeting_time, meeting_mode) VALUES ($1,$2,$3,$4)`,
+      [project_id, meeting_date, meeting_time, meeting_mode]);
+
+    let result = await pool.query(`SELECT email, name FROM project_requests WHERE id = $1`, [project_id]);
+    let clientEmail = result.rows[0].email;
+    let clientName = result.rows[0].name;
+
+    await transporter.sendMail({
+      from: `"D's Office" <${process.env.EMAIL_USER}>`,
+      to: clientEmail,
+      subject: "Meeting Scheduled",
+      html: `<p>Hi ${clientName}, your meeting is on ${meeting_date} at ${meeting_time} (${meeting_mode}).</p>`
+    });
+
+    req.session.success = "Meeting scheduled and email sent.";
+   res.redirect('/projects#log');
+
+  } catch (err) {
+    console.error(err);
+    req.session.error = "Error scheduling meeting.";
+    res.redirect('/projects#schedule');
+  }
+});
+
+
+// Log Meeting Completion
+app.post('/project/meeting/log', async (req, res) => {
+  let { meeting_id, meeting_summary, next_action } = req.body;
+  try {
+    await pool.query(`UPDATE project_meetings SET meeting_summary = $1, next_action = $2, status = 'completed' WHERE id = $3`,
+      [meeting_summary, next_action, meeting_id]);
+    req.session.success = "Meeting log saved.";
+    res.redirect('/projects#team');
+  } catch (err) {
+    console.error(err);
+    req.session.error = "Failed to log meeting.";
+    res.redirect('/projects#log');
+  }
+});
+
+// Assign Team
+app.post('/project/team/register', async (req, res) => {
+  let {
+    project_id, team_name, frontend_lang, backend_lang, database_used, db_service,
+    member_names, member_roles, member_departments, member_emails
+  } = req.body;
+  try {
+    let team = await pool.query(`INSERT INTO project_teams (project_id, team_name, frontend_lang, backend_lang, database_used, db_service) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [project_id, team_name, frontend_lang, backend_lang, database_used, db_service]);
+
+    for (let i = 0; i < member_names.length; i++) {
+      await pool.query(`INSERT INTO team_members (team_id, name, role, department, email) VALUES ($1,$2,$3,$4,$5)`,
+        [team.rows[0].id, member_names[i], member_roles[i], member_departments[i], member_emails[i]]);
+    }
+
+    req.session.success = "Team assigned successfully.";
+    res.redirect('/projects#status');
+  } catch (err) {
+    console.error(err);
+    req.session.error = "Failed to assign team.";
+    res.redirect('/projects#team');
+  }
+});
+
+// Status Update
+app.post('/project/status/update', async (req, res) => {
+  let { project_id, status, estimated_delivery, deploy_date, frontend_status, backend_status, db_status, testing_status } = req.body;
+  try {
+    await pool.query(`
+      INSERT INTO project_status (project_id, status, estimated_delivery, deploy_date)
+      VALUES ($1,$2,$3,$4)
+      ON CONFLICT (project_id) DO UPDATE SET status = EXCLUDED.status, estimated_delivery = EXCLUDED.estimated_delivery, deploy_date = EXCLUDED.deploy_date`,
+      [project_id, status, estimated_delivery, deploy_date]);
+
+    await pool.query(`
+      INSERT INTO status_details (project_id, frontend_status, backend_status, db_status, testing_status)
+      VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (project_id) DO UPDATE SET frontend_status = EXCLUDED.frontend_status, backend_status = EXCLUDED.backend_status, db_status = EXCLUDED.db_status, testing_status = EXCLUDED.testing_status, updated_at = NOW()`,
+      [project_id, frontend_status, backend_status, db_status, testing_status]);
+
+    req.session.success = "Status updated successfully.";
+    res.redirect('/projects#service');
+  } catch (err) {
+    console.error(err);
+    req.session.error = "Failed to update status.";
+    res.redirect('/projects#status');
+  }
+});
+
+// Register Multiple Services
+app.post('/project/services/register', async (req, res) => {
+  let { project_id, service_type, service_name, description, start_date, end_date, billing_type, price } = req.body;
+
+  try {
+    // If only one service is submitted, wrap values in arrays
+    if (!Array.isArray(service_type)) {
+      service_type = [service_type];
+      service_name = [service_name];
+      description = [description];
+      start_date = [start_date];
+      end_date = [end_date];
+      billing_type = [billing_type];
+      price = [price];
+    }
+
+    for (let i = 0; i < service_type.length; i++) {
+      await pool.query(
+        `INSERT INTO project_services 
+        (project_id, service_type, service_name, description, start_date, end_date, billing_type, price)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          project_id,
+          service_type[i],
+          service_name[i],
+          description[i],
+          start_date[i],
+          end_date[i] || null,
+          billing_type[i],
+          price[i]
+        ]
+      );
+    }
+
+    req.session.success = "Service(s) registered successfully.";
+res.redirect('/projects#payment');
+
+  } catch (err) {
+    console.error(err);
+    req.session.error = "Failed to register service(s).";
+    res.redirect('/projects#service');
+  }
+});
+
+
+// Record Payment
+// Step 1: Show form to select project by name
+app.get('/project/payment/start', async (req, res) => {
+  const result = await pool.query(`SELECT id, name FROM project_requests`);
+  res.render('/project', { projects: result.rows });
+});
+// Step 2: Load selected project's services and return to /projects
+app.post('/project/payment/select-service', async (req, res) => {
+  const { project_id } = req.body;
+  console.log("BODY:", req.body);
+
+
+  try {
+    const project = await pool.query(`SELECT id, name FROM project_requests WHERE id = $1`, [project_id]);
+    const services = await pool.query(`SELECT * FROM project_services WHERE project_id = $1`, [project_id]);
+
+    req.session.selectedProject = project.rows[0];
+    req.session.selectedServices = services.rows;
+
+ res.redirect('/projects#payment');
+
+  } catch (err) {
+    console.error(err);
+    req.session.error = 'Failed to load services.';
+   res.redirect('/projects#payment');
+
+  }
+});
+
+
+// Record Payment
+
+
+
+
+app.post('/project/payment/register', upload.single('invoice'), async (req, res) => {
+  try {
+    const { project_id, service_id, payment_mode, amount, transaction_id } = req.body;
+
+    if (!project_id || !service_id || !payment_mode || !amount || !transaction_id) {
+      req.session.error = "Missing required payment fields.";
+      return res.redirect('/projects');
+    }
+
+    // Get service and project info
+    const [projectRes, serviceRes] = await Promise.all([
+      pool.query(`SELECT name, email FROM project_requests WHERE id = $1`, [project_id]),
+      pool.query(`SELECT service_name, service_type, billing_type FROM project_services WHERE id = $1`, [service_id])
     ]);
 
-    if (result.rowCount === 0) return res.status(404).send("File not found");
+    const project = projectRes.rows[0];
+    const service = serviceRes.rows[0];
+    const clientEmail = project?.email;
+    const clientName = project?.name;
+    const date = new Date().toLocaleDateString();
 
-    const file = result.rows[0];
-    res.render('preview', { file });
+    // Generate PDF Invoice
+    const buffers = [];
+    const doc = new PDFDocument({ margin: 50 });
+
+    doc.on('data', buffers.push.bind(buffers));
+    doc.on('end', async () => {
+      const pdfBuffer = Buffer.concat(buffers);
+
+      // Store to DB
+      await pool.query(`
+        INSERT INTO project_payments 
+        (project_id, service_id, payment_mode, amount, transaction_id, invoice_blob)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [
+        project_id,
+        service_id,
+        payment_mode,
+        amount,
+        transaction_id,
+        pdfBuffer
+      ]);
+
+      // Send Email
+      if (clientEmail) {
+        const htmlContent = `
+          <h3>Payment Receipt - D’s Office</h3>
+          <p>Dear ${clientName},</p>
+          <p>Thank you for your payment. Here are the details:</p>
+          <ul>
+            <li><strong>Project:</strong> ${clientName}</li>
+            <li><strong>Service:</strong> ${service.service_name} (${service.service_type})</li>
+            <li><strong>Billing Type:</strong> ${service.billing_type}</li>
+            <li><strong>Amount Paid:</strong> ₹${amount}</li>
+            <li><strong>Payment Mode:</strong> ${payment_mode}</li>
+            <li><strong>Transaction ID:</strong> ${transaction_id}</li>
+            <li><strong>Date:</strong> ${date}</li>
+          </ul>
+          <p>The invoice is attached with this email.</p>
+          <p>Regards,<br/>D’s Office</p>
+        `;
+
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: clientEmail,
+          subject: "Payment Invoice - D’s Office",
+          html: htmlContent,
+          attachments: [{
+            filename: `invoice_${Date.now()}.pdf`,
+            content: pdfBuffer,
+            contentType: 'application/pdf'
+          }]
+        });
+      }
+
+      req.session.success = "Payment recorded and invoice sent.";
+    res.redirect('/projects#payment');
+
+    });
+
+    // Generate Invoice PDF Layout
+    doc.fontSize(20).text("D's Office - Payment Invoice", { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12);
+    doc.text(`Date: ${date}`);
+    doc.text(`Transaction ID: ${transaction_id}`);
+    doc.text(`Client: ${clientName}`);
+    doc.moveDown();
+    doc.text(`Service: ${service.service_name} (${service.service_type})`);
+    doc.text(`Billing Type: ${service.billing_type}`);
+    doc.text(`Payment Mode: ${payment_mode}`);
+    doc.text(`Amount Paid: ₹${amount}`);
+    doc.end();
+
   } catch (err) {
-    console.error("Preview error:", err);
-    res.status(500).send("Internal server error");
+    console.error("❌ Payment Registration Error:", err);
+    req.session.error = "Payment failed.";
+ res.redirect('/projects#payment');
+
   }
 });
-// GENERATE PUBLIC SHARE LINK
-app.get('/file/share/:fileId', async (req, res) => {
-  const { fileId } = req.params;
+
+
+// Run every hour
+cron.schedule('0 * * * *', async () => {
+  try {
+    const result = await pool.query(`
+      DELETE FROM notifications
+      WHERE created_at < NOW() - INTERVAL '24 hours'
+    `);
+    console.log(`🔔 Cleared ${result.rowCount} expired notifications`);
+  } catch (err) {
+    console.error('Failed to clear old notifications:', err);
+  }
+});
+
+
+// -- VAPID keys
+const vapidKeys = {
+ publicKey: 'BGpozbNVPwyaOj6nuG2tWpRvbLzqRpmsVA1Sm82yGLWX0NXAx6k4rawFy3bIDVPXSKqVD46F9ay4-VM9qNH0HGI',
+  privateKey: 'iuA3Lecg3phNOqRSnnGLl7n18XrmLRGcB8w78Gs2Yyo'
+};
+
+webPush.setVapidDetails(
+  'mailto:admin@dsoffice.com',
+  vapidKeys.publicKey,
+  vapidKeys.privateKey
+);
+
+// -- Save push subscription
+app.post('/subscribe', async (req, res) => {
+  const email = req.session.user.email;
+  const subscription = req.body;
 
   try {
-    const result = await pool.query('SELECT * FROM files WHERE id = $1', [fileId]);
-    if (result.rowCount === 0) return res.send("File not found");
+    const exists = await pool.query(
+      'SELECT * FROM push_subscriptions WHERE email = $1',
+      [email]
+    );
 
-    const file = result.rows[0];
-    const shareLink = `${req.protocol}://${req.get('host')}/public/${file.share_token}`;
-    res.render('share_page', { file, shareLink });
+    if (exists.rowCount === 0) {
+      await pool.query(
+        'INSERT INTO push_subscriptions (email, subscription) VALUES ($1, $2)',
+        [email, subscription]
+      );
+    }
+
+    res.status(201).json({ message: 'Subscribed successfully' });
   } catch (err) {
-    console.error("Share error:", err);
-    res.status(500).send("Internal server error");
+    console.error('Subscription save error:', err);
+    res.status(500).send('Subscription failed');
   }
 });
-// PUBLIC ACCESS TO SHARED FILE
-app.get('/public/:token', async (req, res) => {
-  const token = req.params.token;
+
+// -- Send Notification (Admin Only)
+app.post('/notifications/send', async (req, res) => {
+  const { message, recipientEmail, department } = req.body;
+  let targetEmails = [];
 
   try {
-    const result = await pool.query('SELECT * FROM files WHERE share_token = $1', [token]);
-    if (result.rowCount === 0) return res.send("Invalid or expired link");
+    // DB insert
+    if (department && !recipientEmail) {
+      const deptUsers = await pool.query(
+        `SELECT email FROM users WHERE department = $1`,
+        [department]
+      );
 
-    const file = result.rows[0];
-    res.render('public_view', { file });
+      if (deptUsers.rowCount === 0) {
+        return res.status(400).send('Department not found');
+      }
+
+      targetEmails = deptUsers.rows.map(row => row.email);
+
+      await pool.query(
+        `INSERT INTO notifications (message, recipient_email, department)
+         VALUES ($1, NULL, $2)`,
+        [message, department]
+      );
+
+    } else if (recipientEmail) {
+      const user = await pool.query(
+        `SELECT email FROM users WHERE email = $1`,
+        [recipientEmail]
+      );
+
+      if (user.rowCount === 0) {
+        return res.status(400).send('User not found');
+      }
+
+      targetEmails = [recipientEmail];
+
+      await pool.query(
+        `INSERT INTO notifications (message, recipient_email, department)
+         VALUES ($1, $2, NULL)`,
+        [message, recipientEmail]
+      );
+
+    } else {
+      const allUsers = await pool.query(`SELECT email FROM users`);
+      targetEmails = allUsers.rows.map(row => row.email);
+
+      await pool.query(
+        `INSERT INTO notifications (message, recipient_email, department)
+         VALUES ($1, NULL, NULL)`,
+        [message]
+      );
+    }
+
+    // Send push notification to subscribed users
+    const subs = await pool.query(
+      `SELECT subscription FROM push_subscriptions WHERE email = ANY($1)`,
+      [targetEmails]
+    );
+
+    const payload = JSON.stringify({
+      title: '🔔 New Notification',
+      body: message
+    });
+
+    subs.rows.forEach(({ subscription }) => {
+      webPush.sendNotification(subscription, payload).catch(err => {
+        console.error('Push error:', err);
+      });
+    });
+
+    res.redirect('/admin');
   } catch (err) {
-    console.error("Public view error:", err);
-    res.status(500).send("Internal server error");
+    console.error('Notification send failed:', err);
+    res.status(500).send('Failed to send notification');
   }
 });
 
 
-   
+
+app.post('/notifications/delete/:id', async (req, res) => {
+  const { id } = req.params;
+  await pool.query('DELETE FROM notifications WHERE id = $1', [id]);
+  res.redirect('/account');
+});
+
+// attendance api req
+app.get('/attendance/request/api', checkAuth, async (req, res) => {
+  const email = req.session.user.email;
+  const Fetchpassword = await pool.query('SELECT password FROM users WHERE email = $1', [email]);
+  console.log(email, Fetchpassword.rows[0].password);
+  res.json({
+    email: email,
+    password: Fetchpassword.rows[0].password
+  });
+
+});
+
+// ==============================
+// 📄 VERSION PAGE
+// ==============================
 
 
 
 
 
 
-
-
-// Server Start
-// ======================
 app.get('/version', (req, res) => {
   res.render('version');
 });
-app.listen(3000, () => {
-  console.log('🚀 D\'s Office is running at http://localhost:3000');
+server.listen(4000, () => {
+  console.log('✅ Server running on http://localhost:4000');
 });
+
+
+
+
+
+
+
+
