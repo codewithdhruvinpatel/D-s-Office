@@ -2023,7 +2023,7 @@ app.get('/attendance/request/api', checkAuth, async (req, res) => {
 app.get('/version', (req, res) => {
   res.render('version');
 });
-server.listen(4000, () => {
+server.listen(3000, () => {
   console.log('✅ Server running on http://localhost:4000');
 });
 
