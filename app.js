@@ -45,9 +45,10 @@ io.on('connection', (socket) => {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // required for Neon and other hosted providers
-  },
+  ssl: { rejectUnauthorized: false },
+  idleTimeoutMillis: 30000, // Close idle clients after 30s
+  connectionTimeoutMillis: 5000, // Timeout if can't connect in 5s
+  max: 10, // Limit number of clients
 });
 
 pool.connect()
