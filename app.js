@@ -21,7 +21,7 @@ const ffmpegPath = require('ffmpeg-static');
 const sharp = require('sharp');
 const heicConvert = require('heic-convert');
 const crypto = require('crypto');
-
+const pgSession = require('connect-pg-simple')(session);
 ffmpeg.setFfmpegPath(ffmpegPath);
 const puppeteer = require('puppeteer');
 const server = require('http').createServer(app);
@@ -70,12 +70,13 @@ app.set('views', path.join(__dirname, 'views'));
 
 
 app.use(session({
-  secret: "MySuperSecretKey123!@#", // your hardcoded secret
+  store: new pgSession({
+    pool: pool, // your existing pg pool
+  }),
+  secret: process.env.SESSION_SECRET,
   resave: false,
-  saveUninitialized: true,
-  cookie: {
-    maxAge: 1000 * 60 * 60 * 24 // 1 day
-  }
+  saveUninitialized: false,
+  cookie: { secure: false }, // true if using HTTPS
 }));
 
 function checkAuth(req, res, next) {
