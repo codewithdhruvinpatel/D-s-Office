@@ -50,9 +50,10 @@
           <div class="card-body">
             <h5 class="card-title section-title">🎬 YouTube Workflow</h5>
             <ul class="list-group list-group-flush">
-              <li class="list-group-item">Videos Planned: <strong><%= ideaCount  %></strong></li>
-              <li class="list-group-item">Editing in Progress: <strong>2</strong></li>
-              <li class="list-group-item">Scheduled Uploads: <strong>1</strong></li>
+              <li class="list-group-item">Videos Idea: <strong><%= ideaCount  %></strong></li>
+              <li class="list-group-item">Total Videos: <strong><%= totalVideos %></strong></li>
+             
+           
             </ul>
           </div>
         </div>
@@ -141,6 +142,31 @@
   <script>
     console.log("This is the dashboard page");
     console.log("Welcome to the D's Office Family!\n We are glad to have you here. \n If you have any questions, feel free to reach out to us at codewithdhruvinpatel@gmail.com \n (˶ᵔ ᵕ ᵔ˶)");
+  </script>
+<script>
+  async function subscribeToPush() {
+    const registration = await navigator.serviceWorker.register('/sw.js');
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: 'BOPn9kY3Fq3Q2ZqaeuV9B4D3XhOCuDfTTRGJSkj5RjVMS2Z28oTkh6O5v8o3zZcK2hYTTB9eClM4Db7xvB7dH7c' // Replace with your actual public VAPID key
+    });
+
+    await fetch('/subscribe', {
+      method: 'POST',
+      body: JSON.stringify(subscription),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // ✅ This should be outside the function
+  window.addEventListener('load', () => {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      subscribeToPush().catch(err => console.error('Push subscription failed:', err));
+    }
+  });
+</script>
+
+
   </script>
 </body>
 </html>
