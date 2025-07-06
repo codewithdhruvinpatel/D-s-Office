@@ -137,38 +137,24 @@
         </div>
 
         <!-- Notifications Panel -->
-        <h4 class="section-header">Notifications</h4>
-        <div class="notification-box">
-            🔔 Upcoming task: Project submission deadline on 30th June
-        </div>
-        <div class="notification-box">
-            🔔 Your salary for May 2025 has been credited.
-        </div>
+<h4 class="section-header">Notifications</h4>
+<% if (notifications.length === 0) { %>
+  <div class="notification-box">No notifications.</div>
+<% } else { %>
+  <% notifications.forEach(n => { %>
+    <div class="notification-box d-flex justify-content-between align-items-center">
+      <div>
+        🔔 <%= n.message %><br>
+        <small class="text-muted"><%= new Date(n.created_at).toLocaleString() %></small>
+      </div>
+      <form method="POST" action="/notifications/delete/<%= n.id %>">
+        <button class="btn btn-sm btn-danger ml-3">Clear</button>
+      </form>
+    </div>
+  <% }) %>
+<% } %>
 
-        <!-- Activity Summary Widget -->
-        <h4 class="section-header">Activity Summary</h4>
-        <div class="row mb-4">
-            <div class="col-md-3 mb-3">
-                <div class="info-box text-center">
-                    <strong>Projects</strong><br> 5 Active
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="info-box text-center">
-                    <strong>Attendance</strong><br> 95%
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="info-box text-center">
-                    <strong>Leaves</strong><br> 2 Approved
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="info-box text-center">
-                    <strong>Hours Worked</strong><br> 168 Hours
-                </div>
-            </div>
-        </div>
+
 
         <!-- Salary / Financial Summary -->
         <h4 class="section-header">Salary Summary</h4>
