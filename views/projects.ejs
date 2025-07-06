@@ -1,15 +1,765 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Projects</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Projects - D's Office</title>
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+
+  <style>
+    .tab-content > .tab-pane:not(.active) {
+      display: none;
+    }
+    .form-card {
+    border: 1px solid #dff0d8;
+    border-left: 5px solid #28a745;
+    background-color: #f9fdf9;
+    border-radius: 12px;
+  }
+  .form-header {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #28a745;
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .form-header i {
+    font-size: 1.8rem;
+    margin-right: 10px;
+  }
+  .form-section label {
+    font-weight: 500;
+  }
+  .btn-success {
+    background-color: #28a745;
+    border-color: #28a745;
+  }
+  .btn-success:hover {
+    background-color: #218838;
+  }
+  </style>
 </head>
 <body>
-        <div>
-        <%- include('partials/navbar') %>
-        <%- include('partials/updating') %>
-        <%- include('partials/footer') %>
+  <%- include('partials/navbar') %>
+
+  <div class="container mt-4" >
+    <% if (success) { %>
+      <div class="alert alert-success"><%= success %></div>
+    <% } %>
+    <% if (error) { %>
+      <div class="alert alert-danger"><%= error %></div>
+    <% } %>
+
+    <ul class="nav nav-tabs" id="projectTabs" style="margin-top: 100px;">
+      <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#request">Project Request</a></li>
+      <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#verify">OTP Verification</a></li>
+      <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#manage">Manage Requests</a></li>
+      <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#schedule">Schedule Meeting</a></li>
+      <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#log">Log Meeting</a></li>
+      <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#team">Assign Team</a></li>
+      <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#status">Update Status</a></li>
+      <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#service">Register Service</a></li>
+      <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#payment">Record Payment</a></li>
+    </ul>
+
+    <div class="tab-content mt-4">
+      <div id="request" class="tab-pane active">
+        <!-- Project Request Form -->
+        <form action="/project/request" method="POST" class="card p-4 shadow-sm">
+          <div class="row">
+            <div class="col-md-6 mb-3"><input name="name" class="form-control" placeholder="Full Name" required /></div>
+            <div class="col-md-6 mb-3"><input name="email" class="form-control" type="email" placeholder="Email" required /></div>
+            <div class="col-md-6 mb-3"><input name="mobile" class="form-control" placeholder="Mobile Number" required /></div>
+            <div class="col-md-6 mb-3"><input name="address" class="form-control" placeholder="Address" required /></div>
+            <div class="col-md-4 mb-3"><input name="state" class="form-control" placeholder="State" required /></div>
+            <div class="col-md-4 mb-3"><input name="country" class="form-control" placeholder="Country" required /></div>
+            <div class="col-md-4 mb-3"><input name="pincode" class="form-control" placeholder="Pin Code" required /></div>
+            <div class="col-md-12 mb-3">
+              <select name="project_type" class="form-control" required>
+                <option disabled selected>-- Select Project Type --</option>
+                <option>Web Development</option>
+                <option>Web App</option>
+                <option>Windows App</option>
+                <option>iOS Mac</option>
+                <option>iOS Mobile App</option>
+                <option>Android App</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-success btn-block">Submit Request</button>
+        </form>
+      </div>
+
+      <div id="verify" class="tab-pane">
+        <!-- OTP Verification -->
+        <form action="/project/verify" method="POST" class="card p-4 shadow-sm">
+          <input type="email" name="email" class="form-control mb-3" placeholder="Your Email" required />
+          <input type="text" name="otp" class="form-control mb-3" placeholder="6-digit OTP" required />
+          <button class="btn btn-primary btn-block">Verify</button>
+        </form>
+        <!-- Resend OTP -->
+<form action="/project/send-otp" method="POST" class="card p-3 shadow-sm mb-4">
+  <h5>Resend OTP</h5>
+  <div class="input-group">
+    <input type="email" name="email" class="form-control" placeholder="Enter your email" required />
+    <button class="btn btn-secondary">Send OTP</button>
+  </div>
+</form>
+
+        <!-- Show Pending Verifications -->
+<div class="mt-4">
+  <h5>Pending Verification Requests</h5>
+  <table class="table table-bordered table-striped">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Mobile Number</th>
+        <th>Email</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (pendingRequests.length === 0) { %>
+        <tr>
+          <td colspan="3" class="text-center">No pending verification requests.</td>
+        </tr>
+      <% } else { %>
+        <% pendingRequests.forEach(req => { %>
+          <tr>
+            <td><%= req.name %></td>
+            <td><%= req.mobile %></td>
+            <td><%= req.email %></td>
+          </tr>
+        <% }) %>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+      </div>
+
+      <div id="manage" class="tab-pane">
+        <!-- Manage Verified Project Requests -->
+        <% if (requests.length === 0) { %>
+          <p class="text-muted">No verified requests to manage.</p>
+        <% } else { %>
+          <% requests.forEach(r => { %>
+            <div class="card mb-3 p-3 shadow-sm">
+              <h5><%= r.name %> - <%= r.project_type %></h5>
+              <form action="/project/manage" method="POST" class="form-inline">
+                <input type="hidden" name="request_id" value="<%= r.id %>">
+                <button name="action" value="accept" class="btn btn-success mr-2">Accept</button>
+                <button name="action" value="reject" class="btn btn-danger mr-2">Reject</button>
+                <input type="text" name="reason" class="form-control" placeholder="Reason for rejection (optional)">
+              </form>
+            </div>
+          <% }) %>
+        <% } %>
+      </div>
+
+      <div id="schedule" class="tab-pane">
+        <!-- Meeting Schedule Form -->
+        <form action="/project/meeting/schedule" method="POST" class="card p-4 shadow-sm">
+          <div class="form-group">
+            <label>Select Project:</label>
+           <select name="project_id" class="form-control" required>
+  <% select_project_for_meeting.forEach(r => { %>
+    <option value="<%= r.id %>"><%= r.name %> - <%= r.project_type %></option>
+  <% }) %>
+</select>
+
+          </div>
+          <div class="form-group"><label>Date:</label><input type="date" name="meeting_date" class="form-control" required /></div>
+          <div class="form-group"><label>Time:</label><input type="time" name="meeting_time" class="form-control" required /></div>
+          <div class="form-group">
+            <label>Mode:</label>
+            <select name="meeting_mode" class="form-control" required>
+              <option value="online">Online</option>
+              <option value="offline">Offline</option>
+            </select>
+          </div>
+          <button class="btn btn-success">Schedule Meeting</button>
+        </form>
+      </div>
+
+      <div id="log" class="tab-pane">
+        <!-- Log Meeting -->
+        <% if (meetings.length === 0) { %>
+          <p class="text-muted">No scheduled meetings to log yet.</p>
+        <% } else { %>
+          <% meetings.forEach(m => { %>
+            <div class="card mb-4 p-4 shadow-sm">
+              <h5 class="text-info"><%= m.client_name %> - <%= m.project_type %></h5>
+              <p>
+                <strong>Date:</strong> <%= m.meeting_date.toISOString().slice(0, 10) %><br/>
+                <strong>Time:</strong> <%= m.meeting_time %><br/>
+                <strong>Mode:</strong> <%= m.meeting_mode.toUpperCase() %>
+              </p>
+              <form action="/project/meeting/log" method="POST">
+                <input type="hidden" name="meeting_id" value="<%= m.id %>">
+                <textarea name="meeting_summary" class="form-control mb-2" placeholder="Summary" required></textarea>
+                <textarea name="next_action" class="form-control mb-2" placeholder="Next Action" required></textarea>
+      <button class="btn btn-success" onclick="this.disabled=true; this.form.submit();">Mark as Completed</button>
+
+              </form>
+            </div>
+          <% }) %>
+        <% } %>
+      </div>
+
+<div id="team" class="tab-pane">
+  <!-- Assign Team -->
+  <form action="/project/team/register" method="POST" class="card p-4 shadow-sm">
+    <select name="project_id" class="form-control mb-3" required>
+      <% projectsForMeeting.forEach(r => { %>
+        <option value="<%= r.id %>"><%= r.name %> - <%= r.project_type %></option>
+      <% }) %>
+    </select>
+
+    <input name="team_name" class="form-control mb-3" placeholder="Team Name" required />
+
+    <div class="row">
+      <!-- Frontend -->
+      <div class="col">
+        <select name="frontend_lang" class="form-control mb-3" required>
+          <option disabled selected>Choose Frontend</option>
+          <option>HTML/CSS/JS</option>
+          <option>React.js</option>
+          <option>Vue.js</option>
+          <option>Angular</option>
+          <option>Svelte</option>
+          <option>Next.js</option>
+          <option>Bootstrap</option>
+          <option>Tailwind CSS</option>
+          <option>jQuery</option>
+          <option>Flutter Web</option>
+          <option>Nuxt.js</option>
+          <option>embedded.js</option>
+          <option>Gatsby.js</option>
+          <option>Alpine.js</option>
+          <option>Solid.js</option>
+
+        </select>
+      </div>
+
+      <!-- Backend -->
+      <div class="col">
+        <select name="backend_lang" class="form-control mb-3" required>
+          <option disabled selected>Choose Backend</option>
+          <option>Node.js (Express)</option>
+          <option>Python (Flask)</option>
+          <option>Python (Django)</option>
+          <option>PHP</option>
+          <option>Java (Spring Boot)</option>
+          <option>C# (.NET Core)</option>
+          <option>Ruby on Rails</option>
+          <option>Go (Gin/Fiber)</option>
+          <option>Rust (Actix)</option>
+          <option>Elixir (Phoenix)</option>
+          <option>Laravel</option>
+          <option>FastAPI (Python)</option>
+          <option>ASP.NET</option>
+          <option>Spring (Java)</option>
+          <option>Flask (Python)</option>
+          <option>Express.js (Node.js)</option>
+          <option>Fastify (Node.js)</option>
+          <option>Spring Boot (Java)</option>
+          <option>Gin (Go)</option>
+          <option>Laravel (PHP)</option>
+          <option>Symfony (PHP)</option>
+          <option>CodeIgniter (PHP)</option>
+          <option>NestJS (Node.js)</option>
+          <option>ASP.NET Core (C#)</option>
+          <option>Ruby (Sinatra)</option>
+          <option>Hapi.js (Node.js)</option>
+          <option>Actix (Rust)</option>
+        </select>
+      </div>
+
+      <!-- Database -->
+      <div class="col">
+        <select name="database_used" class="form-control mb-3" required>
+          <option disabled selected>Choose Database</option>
+          <option>PostgreSQL</option>
+          <option>MySQL</option>
+          <option>MongoDB</option>
+          <option>Firebase</option>
+          <option>SQLite</option>
+          <option>Oracle</option>
+          <option>Redis</option>
+          <option>Supabase (PostgreSQL)</option>
+          
+        </select>
+      </div>
     </div>
+
+    <!-- DB Hosting Service -->
+    <select name="db_service" class="form-control mb-3">
+      <option disabled selected>Choose DB Hosting/Service</option>
+      <option>Localhost</option>
+      <option>Neon (Free PostgreSQL)</option>
+      <option>Render (Free)</option>
+      <option>Railway (Free Tier)</option>
+      <option>Supabase (Free PostgreSQL)</option>
+      <option>PlanetScale (MySQL)</option>
+      <option>Firebase</option>
+      <option>MongoDB Atlas (Free)</option>
+      <option>ElephantSQL</option>
+      <option>Vercel (With PlanetScale)</option>
+      <option>Heroku (Free PostgreSQL - limited)</option>
+      <option>DigitalOcean (Managed DB)</option>
+      <option>AWS RDS (Free Tier)</option>
+      <option>Azure SQL Database (Free Tier)</option>
+      <option>Google Cloud SQL (Free Tier)</option>
+      <option>Linode (Managed DB)</option>
+      <option>Scaleway (Managed DB)</option>
+      <option>IBM Cloud Databases (Free Tier)</option>
+      <option>Bit.io (Free PostgreSQL)</option>
+      <option>Supabase (Managed PostgreSQL)</option>
+      <option>ElephantSQL (Free PostgreSQL)</option>
+      <option>Heroku Postgres (Free Tier)</option>
+    </select>
+
+    <!-- Team Members -->
+    <h5>Team Members</h5>
+    <div id="team-members">
+     <div class="row mb-2">
+  <!-- Member Name -->
+  <div class="col">
+    <input name="member_names[]" class="form-control" placeholder="Name" required />
+  </div>
+
+  <!-- Member Role (Dropdown) -->
+  <div class="col">
+    <select name="member_roles[]" class="form-control" required>
+      <option disabled selected>Select Role</option>
+      <option>Frontend Developer</option>
+      <option>Backend Developer</option>
+      <option>Full Stack Developer</option>
+      <option>UI/UX Designer</option>
+      <option>Project Manager</option>
+      <option>Scrum Master</option>
+      <option>QA Engineer</option>
+      <option>DevOps Engineer</option>
+      <option>Database Administrator</option>
+      <option>Software Tester</option>
+      <option>Mobile App Developer</option>
+      <option>AI/ML Engineer</option>
+      <option>Security Analyst</option>
+      <option>Technical Writer</option>
+      <option>Business Analyst</option>
+      <option>Cloud Engineer</option>
+      <option>Intern</option>
+    </select>
+  </div>
+
+  <!-- Member Department (Dropdown) -->
+  <div class="col">
+    <select name="member_departments[]" class="form-control">
+      <option disabled selected>Select Department</option>
+      <option>Computer Science</option>
+      <option>Information Technology</option>
+      <option>Software Engineering</option>
+      <option>Electronics & Communication</option>
+      <option>Electrical</option>
+      <option>Mechanical</option>
+      <option>Civil</option>
+      <option>AI & Data Science</option>
+      <option>Cybersecurity</option>
+      <option>Design & Multimedia</option>
+      <option>Business Administration</option>
+      <option>Human Resources</option>
+      <option>Marketing</option>
+      <option>Finance</option>
+    </select>
+  </div>
+
+  <!-- Member Email -->
+  <div class="col">
+    <input name="member_emails[]" class="form-control" placeholder="Email" />
+  </div>
+</div>
+
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-info mb-3" onclick="addMember()">+ Add Member</button>
+    <button class="btn btn-success btn-block">Assign Team</button>
+  </form>
+</div>
+
+
+<div id="status" class="tab-pane">
+  <!-- Status Update -->
+  <form action="/project/status/update" method="POST" class="card p-4 shadow-sm">
+    
+    <!-- Project Selection -->
+    <label for="project_id">Select Project</label>
+    <select name="project_id" class="form-control mb-3" required>
+      <% updateStatusPromises.forEach(p => { %>
+        <option value="<%= p.project_id %>">
+          <%= p.project_name %> (<%= p.team_name %>)
+        </option>
+      <% }) %>
+    </select>
+
+    <!-- Overall Project Status -->
+    <label for="status">Project Stage</label>
+    <select name="status" class="form-control mb-3" required>
+      <option disabled selected>Select Project Stage</option>
+      <option>registered</option>
+      <option>in_progress</option>
+      <option>testing</option>
+      <option>deployed</option>
+    </select>
+
+    <!-- Dates -->
+    <div class="row">
+      <div class="col">
+        <label for="estimated_delivery">Estimated Delivery Date</label>
+        <input type="date" name="estimated_delivery" class="form-control mb-3" />
+      </div>
+      <div class="col">
+        <label for="deploy_date">Actual Deploy Date</label>
+        <input type="date" name="deploy_date" class="form-control mb-3" />
+      </div>
+    </div>
+
+    <!-- Module-wise Statuses -->
+    <div class="row">
+      <!-- Frontend Status -->
+      <div class="col">
+        <label for="frontend_status">Frontend Status</label>
+        <select name="frontend_status" class="form-control" required>
+          <option disabled selected>Select Frontend Status</option>
+          <option>Not Started</option>
+          <option>In Progress</option>
+          <option>Completed</option>
+          <option>Blocked</option>
+          <option>Pending Review</option>
+        </select>
+      </div>
+
+      <!-- Backend Status -->
+      <div class="col">
+        <label for="backend_status">Backend Status</label>
+        <select name="backend_status" class="form-control" required>
+          <option disabled selected>Select Backend Status</option>
+          <option>Not Started</option>
+          <option>In Progress</option>
+          <option>Completed</option>
+          <option>Blocked</option>
+          <option>Pending Review</option>
+        </select>
+      </div>
+
+      <!-- Database Status -->
+      <div class="col">
+        <label for="db_status">Database Status</label>
+        <select name="db_status" class="form-control" required>
+          <option disabled selected>Select DB Status</option>
+          <option>Not Started</option>
+          <option>Schema Designed</option>
+          <option>Partially Implemented</option>
+          <option>Completed</option>
+          <option>Issues Found</option>
+        </select>
+      </div>
+
+      <!-- Testing Status -->
+      <div class="col">
+        <label for="testing_status">Testing Status</label>
+        <select name="testing_status" class="form-control" required>
+          <option disabled selected>Select Testing Status</option>
+          <option>Not Started</option>
+          <option>In Progress</option>
+          <option>Passed</option>
+          <option>Failed</option>
+          <option>Bug Fixing</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <button class="btn btn-primary mt-4">Update Status</button>
+  </form>
+</div>
+
+
+<div id="service" class="tab-pane">
+  <!-- Register Service -->
+  <form action="/project/services/register" method="POST" class="card p-4 shadow-sm">
+
+    <!-- Project Selection -->
+    <label for="project_id">Select Project</label>
+    <select name="project_id" class="form-control mb-3" required>
+      <option disabled selected>Select a project</option>
+      <% project_services.forEach(p => { %>
+        <option value="<%= p.id %>"><%= p.name %></option>
+      <% }) %>
+    </select>
+
+    <div id="service-wrapper">
+      <!-- Single service block -->
+      <div class="service-block border p-3 mb-3 rounded">
+        <div class="row">
+          <!-- Service Type -->
+          <div class="col">
+            <label>Service Type</label>
+            <select name="service_type[]" class="form-control mb-3" required>
+              <option disabled selected>Select Type</option>
+              <option>Domain</option>
+              <option>Hosting</option>
+              <option>SSL Certificate</option>
+              <option>CDN</option>
+              <option>Email Service</option>
+              <option>Database Service</option>
+              <option>SMS Gateway</option>
+              <option>Payment Gateway</option>
+              <option>Cloud Function</option>
+              <option>Storage (e.g. S3, Cloudinary)</option>
+              <option>Analytics</option>
+              <option>SEO Tools</option>
+              <option>API Subscription</option>
+              <option>Third-party Plugin</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <!-- Service Name -->
+          <div class="col">
+            <label>Service Name</label>
+            <input name="service_name[]" class="form-control mb-3" placeholder="Enter Name" required />
+          </div>
+
+          <!-- Billing Type -->
+          <div class="col">
+            <label>Billing Type</label>
+            <select name="billing_type[]" class="form-control mb-3" required>
+              <option value="one-time">One-time</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <label>Description (Optional)</label>
+        <textarea name="description[]" class="form-control mb-3" placeholder="Details..."></textarea>
+
+        <!-- Dates & Price -->
+        <div class="row">
+          <div class="col">
+            <label>Start Date</label>
+            <input type="date" name="start_date[]" class="form-control mb-3" required />
+          </div>
+          <div class="col">
+            <label>End Date</label>
+            <input type="date" name="end_date[]" class="form-control mb-3" />
+          </div>
+          <div class="col">
+            <label>Price (₹)</label>
+            <input type="number" step="0.01" name="price[]" class="form-control mb-3" placeholder="₹" required />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Button to add another service -->
+    <button type="button" class="btn btn-outline-info btn-sm mb-3" onclick="addServiceBlock()">+ Add Another Service</button>
+
+    <!-- Submit -->
+    <button class="btn btn-success btn-block">Register Service(s)</button>
+  </form>
+</div>
+
+
+<div id="payment" class="tab-pane">
+
+  <!-- STEP 1: Select Project -->
+  <% if (!selectedProject) { %>
+    <h4>Select Project</h4>
+    <form action="/project/payment/select-service" method="POST"  class="card p-4 shadow-sm">
+      <label for="project_id">Project Name</label>
+      <select name="project_id" class="form-control mb-3" required>
+        <% projects.forEach(p => { %>
+          <option value="<%= p.project_id || p.id %>"><%= p.name %></option>
+        <% }) %>
+      </select>
+      <button class="btn btn-primary">Next</button>
+    </form>
+  <% } else { %>
+
+    <!-- STEP 2: Payment Form -->
+    <h4>Project: <%= selectedProject.name %></h4>
+    <form action="/project/payment/register" method="POST" enctype="multipart/form-data" class="card p-4 shadow-sm">
+      <input type="hidden" name="project_id" value="<%= selectedProject.id %>" />
+
+      <label for="service_id">Select Service</label>
+      <select name="service_id" class="form-control mb-3" required>
+        <% selectedServices.forEach(s => { %>
+          <option value="<%= s.id %>"><%= s.service_name %></option>
+        <% }) %>
+      </select>
+
+      <div class="row">
+        <div class="col">
+          <label>Payment Mode</label>
+          <select name="payment_mode" class="form-control" required>
+            <option>UPI</option>
+            <option>Net Banking</option>
+            <option>Cash</option>
+            <option>Card</option>
+            <option>PayPal</option>
+          </select>
+        </div>
+        <div class="col">
+          <label>Transaction ID</label>
+          <input name="transaction_id" class="form-control" required />
+        </div>
+        <div class="col">
+          <label>Amount (₹)</label>
+          <input name="amount" type="number" step="0.01" class="form-control" required />
+        </div>
+      </div>
+
+      <label for="invoice">Upload Invoice/Receipt (PDF)</label>
+      <input type="file" name="invoice" class="form-control mb-3" accept="application/pdf"  />
+
+      <button class="btn btn-success mt-3">Record Payment</button>
+    </form>
+  <% } %>
+</div>
+
+
+    </div>
+  </div>
+
+  <%- include('partials/footer') %>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  function addMember() {
+    const memberRow = `
+      <div class="row mb-2">
+        <!-- Member Name -->
+        <div class="col">
+          <input name="member_names[]" class="form-control" placeholder="Name" required />
+        </div>
+
+        <!-- Member Role -->
+        <div class="col">
+          <select name="member_roles[]" class="form-control" required>
+            <option disabled selected>Select Role</option>
+            <option>Frontend Developer</option>
+            <option>Backend Developer</option>
+            <option>Full Stack Developer</option>
+            <option>UI/UX Designer</option>
+            <option>Project Manager</option>
+            <option>Scrum Master</option>
+            <option>QA Engineer</option>
+            <option>DevOps Engineer</option>
+            <option>Database Administrator</option>
+            <option>Software Tester</option>
+            <option>Mobile App Developer</option>
+            <option>AI/ML Engineer</option>
+            <option>Security Analyst</option>
+            <option>Technical Writer</option>
+            <option>Business Analyst</option>
+            <option>Cloud Engineer</option>
+            <option>Intern</option>
+          </select>
+        </div>
+
+        <!-- Member Department -->
+        <div class="col">
+          <select name="member_departments[]" class="form-control">
+            <option disabled selected>Select Department</option>
+            <option>Computer Science</option>
+            <option>Information Technology</option>
+            <option>Software Engineering</option>
+            <option>Electronics & Communication</option>
+            <option>Electrical</option>
+            <option>Mechanical</option>
+            <option>Civil</option>
+            <option>AI & Data Science</option>
+            <option>Cybersecurity</option>
+            <option>Design & Multimedia</option>
+            <option>Business Administration</option>
+            <option>Human Resources</option>
+            <option>Marketing</option>
+            <option>Finance</option>
+          </select>
+        </div>
+
+        <!-- Member Email -->
+        <div class="col">
+          <input name="member_emails[]" class="form-control" placeholder="Email" />
+        </div>
+      </div>
+    `;
+    document.getElementById('team-members').insertAdjacentHTML('beforeend', memberRow);
+  }
+</script>
+<script>
+  function addServiceBlock() {
+    const wrapper = document.getElementById('service-wrapper');
+    const block = document.querySelector('.service-block').cloneNode(true);
+
+    // Clear input values inside the cloned block
+    block.querySelectorAll('input, textarea, select').forEach(el => {
+      if (el.tagName === "SELECT") el.selectedIndex = 0;
+      else el.value = '';
+    });
+
+    wrapper.appendChild(block);
+  }
+</script>
+<script>
+  const allServices = <%- JSON.stringify(services) %>;
+
+  document.getElementById('project').addEventListener('change', function () {
+    const projectId = this.value;
+    const serviceSelect = document.getElementById('service');
+
+    // Clear previous options
+    serviceSelect.innerHTML = '<option disabled selected>Loading services...</option>';
+
+    // Filter services based on selected project
+    const filtered = allServices.filter(s => s.project_id == projectId);
+
+    if (filtered.length === 0) {
+      serviceSelect.innerHTML = '<option disabled selected>No services for this project</option>';
+      return;
+    }
+
+    serviceSelect.innerHTML = '<option disabled selected>Select a service</option>';
+    filtered.forEach(service => {
+      const opt = document.createElement('option');
+      opt.value = service.id;
+      opt.textContent = service.service_name || `Service #${service.id}`;
+      serviceSelect.appendChild(opt);
+    });
+  });
+</script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const hash = window.location.hash;
+    if (hash) {
+      // Activate the tab
+      const tabLink = document.querySelector(`.nav-link[href="${hash}"]`);
+      if (tabLink) {
+        document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+
+        tabLink.classList.add('active');
+        const tabPane = document.querySelector(hash);
+        if (tabPane) tabPane.classList.add('active');
+      }
+    }
+  });
+</script>
+
 </body>
 </html>
