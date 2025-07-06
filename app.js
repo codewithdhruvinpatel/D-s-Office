@@ -21,7 +21,7 @@ const ffmpegPath = require('ffmpeg-static');
 const sharp = require('sharp');
 const heicConvert = require('heic-convert');
 const crypto = require('crypto');
-const pgSession = require('connect-pg-simple')(session);
+
 ffmpeg.setFfmpegPath(ffmpegPath);
 const puppeteer = require('puppeteer');
 const server = require('http').createServer(app);
