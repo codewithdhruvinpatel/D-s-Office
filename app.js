@@ -73,7 +73,7 @@ app.use(session({
   store: new pgSession({
     pool: pool, // your existing pg pool
   }),
-  secret: process.env.SESSION_SECRET,
+  secret: 'super-secret-dhruvin-key',
   resave: false,
   saveUninitialized: false,
   cookie: { secure: false }, // true if using HTTPS
