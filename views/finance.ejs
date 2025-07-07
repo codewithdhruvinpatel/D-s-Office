@@ -20,10 +20,8 @@
 <%- include('partials/navbar') %>
 
 <div class="container my-5" >
- 
-
-  <div class="row mb-5 "style="margin-top: 100px;" >
-    <div class="col-md-4" >
+  <div class="row mb-5" style="margin-top: 100px;">
+    <div class="col-md-4">
       <div class="card card-summary bg-success text-white p-4">
         <h5>Total Income</h5>
         <h3>₹<%= income %></h3>
@@ -92,7 +90,7 @@
       <tbody>
         <% transactions.forEach(t => { %>
           <tr>
-            <td><%= new Date(t.date).toLocaleDateString() %></td>
+            <td><%= new Date(t.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) %></td>
             <td><%= t.title %></td>
             <td>
               <% if (t.type === 'income') { %>
@@ -103,10 +101,49 @@
             </td>
             <td>₹<%= t.amount %></td>
             <td>
-              <!-- <a href="/generate-bill/<%= t.id %>" class="btn btn-sm btn-outline-info">PDF</a> -->
+              <!-- Delete -->
               <form action="/delete-transaction/<%= t.id %>" method="POST" style="display:inline-block;">
                 <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
               </form>
+
+              <!-- Edit -->
+              <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editModal<%= t.id %>">
+                Edit
+              </button>
+
+              <!-- Edit Modal -->
+              <div class="modal fade" id="editModal<%= t.id %>" tabindex="-1" aria-labelledby="editModalLabel<%= t.id %>" aria-hidden="true">
+                <div class="modal-dialog">
+                  <div class="modal-content">
+                    <form action="/edit-transaction/<%= t.id %>" method="POST">
+                      <div class="modal-header">
+                        <h5 class="modal-title" id="editModalLabel<%= t.id %>">Edit Transaction</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                      </div>
+                      <div class="modal-body">
+                        <div class="mb-3">
+                          <label>Title</label>
+                          <input type="text" name="title" value="<%= t.title %>" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                          <label>Amount</label>
+                          <input type="number" name="amount" value="<%= t.amount %>" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                          <label>Type</label>
+                          <select name="type" class="form-select">
+                            <option value="income" <%= t.type === 'income' ? 'selected' : '' %>>Income</option>
+                            <option value="expense" <%= t.type === 'expense' ? 'selected' : '' %>>Expense</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
             </td>
           </tr>
         <% }) %>
@@ -117,6 +154,8 @@
 
 <%- include('partials/footer') %>
 
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
   function calculate() {
     const amount = parseFloat(document.getElementById('calcAmount').value);
