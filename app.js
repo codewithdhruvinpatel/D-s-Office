@@ -754,10 +754,11 @@ app.post('/add-transaction', async (req, res) => {
     const { type, title, amount } = req.body;
     const email = req.session.user.email;
 
-    await pool.query(
-      'INSERT INTO transactions (type, title, amount, email) VALUES ($1, $2, $3, $4)',
-      [type, title, amount, email]
-    );
+   await pool.query(
+  'INSERT INTO transactions (type, title, amount, email, date) VALUES ($1, $2, $3, $4, NOW())',
+  [type, title, amount, email]
+);
+
     res.redirect('/finance');
   } catch (err) {
     console.error(err);
