@@ -103,7 +103,7 @@
             </td>
             <td>₹<%= t.amount %></td>
             <td>
-              <a href="/generate-bill/<%= t.id %>" class="btn btn-sm btn-outline-info">PDF</a>
+              <!-- <a href="/generate-bill/<%= t.id %>" class="btn btn-sm btn-outline-info">PDF</a> -->
               <form action="/delete-transaction/<%= t.id %>" method="POST" style="display:inline-block;">
                 <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
               </form>
