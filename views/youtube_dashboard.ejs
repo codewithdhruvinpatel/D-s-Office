@@ -51,7 +51,8 @@
     <tr data-bs-toggle="collapse" data-bs-target="#details-<%= video.id %>" aria-expanded="false" aria-controls="details-<%= video.id %>" style="cursor:pointer;">
       <td><%= video.title %></td>
       <td><%= video.topic %></td>
-      <td><%= video.shoot_date ? new Date(video.shoot_date).toISOString().split('T')[0] : '' %></td>
+      <td><%= formatDate(video.shoot_date) %></td>
+
       <td><%= video.edit_status %></td>
       <td><%= video.upload_status %></td>
       <td>
@@ -332,6 +333,15 @@
                 </tr>
               </thead>
            <tbody>
+            <% function formatDate(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+} %>
+
   <% analytics.forEach(an => { %>
     <!-- Display Row -->
     <tr>
@@ -340,7 +350,8 @@
       <td><%= an.likes %></td>
       <td><%= an.comments %></td>
       <td><%= an.subs %></td>
-      <td><%= new Date(an.recorded_at).toISOString().split('T')[0] %></td>
+  <td><%= formatDate(an.recorded_at) %></td>
+
       <td>
         <button class="btn btn-sm btn-secondary" data-bs-toggle="collapse" data-bs-target="#analytics-<%= an.id %>">
           Details
